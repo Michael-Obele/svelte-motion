@@ -1,3 +1,40 @@
+/**
+ * @file use-animation.js
+ * @module svelte-motion/animation/use-animation
+ * Provides the `useAnimation` hook for creating animation controls and
+ * re-exports the {@link module:svelte-motion/animation/UseAnimation.svelte~UseAnimation} Svelte component
+ * which wraps this hook for component-based usage.
+ *
+ * The `useAnimation` hook allows for imperative control over animations (start, stop, etc.),
+ * while the `UseAnimation` component provides these controls through a slot.
+ * This structure allows for flexible usage, either programmatically with the hook or
+ * declaratively with the component.
+ *
+ * @example
+ * ```javascript
+ * // Using the hook directly in a Svelte script tag
+ * import { useAnimation } from 'svelte-motion'; // or from 'svelte-motion/animation'
+ * const controls = useAnimation();
+ * function startMyAnimation() {
+ *   controls.start({ x: 100, transition: { duration: 0.5 } });
+ * }
+ * ```
+ *
+ * @example
+ * ```svelte
+ * <!-- Using the UseAnimation component -->
+ * <script>
+ *   import { UseAnimation } from 'svelte-motion'; // or from 'svelte-motion/animation'
+ *   // `controls` will be available from the slot
+ * </script>
+ *
+ * <UseAnimation let:controls>
+ *   <div animate={controls} />
+ *   <button on:click={() => controls.start({ scale: 1.2 })}>Animate</button>
+ * </UseAnimation>
+ * ```
+ */
+
 /** 
 based on framer-motion@4.0.3,
 Copyright (c) 2018 Framer B.V.

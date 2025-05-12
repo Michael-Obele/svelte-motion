@@ -1,8 +1,27 @@
-
-/** 
-based on framer-motion@4.0.3,
-Copyright (c) 2018 Framer B.V.
-*/
+/**
+ * @file easing.js
+ * @module svelte-motion/animation/utils/easing
+ * @description
+ * This module provides utility functions for handling easing definitions within `svelte-motion`.
+ * It primarily converts easing definitions—which can be strings (e.g., "linear", "easeIn"),
+ * arrays of four numbers (for cubic bezier curves like `[0.42, 0, 0.58, 1]`), or arrays of
+ * such definitions (for sequence easing)—into their corresponding callable functions,
+ * primarily sourced from the Popmotion library.
+ *
+ * This abstraction allows users of `svelte-motion` to specify easing in a flexible,
+ * declarative manner, similar to how it's done in Framer Motion.
+ *
+ * Key exports:
+ * - `easingDefinitionToFunction(definition)`: Takes an easing definition (string, array of numbers,
+ *   or a direct function) and returns the corresponding easing function from Popmotion or the function itself.
+ * - `isEasingArray(ease)`: A type guard to check if an easing definition is an array of multiple
+ *   easing functions (potentially for sequenced or staggered animations).
+ *
+ * The module relies on Popmotion for the actual easing algorithms.
+ *
+ * Original inspiration and structure from framer-motion.
+ * Copyright (c) 2018 Framer B.V.
+ */
 import {fixed} from '../../utils/fix-process-env';
 import { __read } from 'tslib';
 import { cubicBezier, linear, easeIn, easeInOut, easeOut, circIn, circInOut, circOut, backIn, backInOut, backOut, anticipate, bounceIn, bounceInOut, bounceOut } from 'popmotion';
