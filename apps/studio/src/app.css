@@ -1,0 +1,14 @@
+/*
+ * Screenshot fidelity.
+ *
+ * The studio is a render host: whatever the browser draws around the composition
+ * ends up in the captured PNG. So the page has no chrome — no body margin, no
+ * scrollbars, no background bleed.
+ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}

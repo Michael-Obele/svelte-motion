@@ -11,7 +11,8 @@
   "scripts": {
     "ready": "vp check && vp run -r test && vp run -r build",
     "dev": "vp run studio#dev",
-    "dev:web": "vp run web#dev"
+    "dev:web": "vp run web#dev",
+    "spike": "vp run studio#build && bun run tools/spike/determinism.ts"
   },
   "devDependencies": {
     "vite": "catalog:",

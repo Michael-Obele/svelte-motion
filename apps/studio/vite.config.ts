@@ -1,5 +1,5 @@
-import adapter from "@sveltejs/adapter-auto";
 import { sveltekit } from "@sveltejs/kit/vite";
+import adapter from "@sveltejs/adapter-static";
 import { defineConfig } from "vite-plus";
 import { lazyPlugins } from "vite-plus";
 
@@ -12,10 +12,11 @@ export default defineConfig({
           filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
       },
 
-      // adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-      // If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-      // See https://svelte.dev/docs/kit/adapters for more information about adapters.
-      adapter: adapter(),
+      // The studio is a render host, not a deployed site: every route is client-only
+      // (see `src/routes/+layout.ts`), so the build emits one SPA fallback that
+      // `vite preview` serves for any path. That is what lets the M2 renderer ask for
+      // `/render?composition=<id>&frame=<n>` without a per-frame HTML file.
+      adapter: adapter({ fallback: "index.html" }),
     }),
   ]),
 });
