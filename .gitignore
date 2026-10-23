@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# The plan. Kept out of version control on purpose: it is a working document,
+# and the canonical copy lives in AI-Plans/plans/svelte-motion/.
+# ---------------------------------------------------------------------------
+plan/
+
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build output
+dist/
+build/
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+.vscode/
+.fallow/
+.superpowers/
+
+# Logs
+*.log
+npm-debug.log*
