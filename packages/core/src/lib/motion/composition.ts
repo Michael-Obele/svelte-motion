@@ -28,6 +28,10 @@ export type CompositionConfig<Props extends Record<string, unknown> = Record<str
   /**
    * Optional valibot schema for `defaultProps`.
    *
+   * `defaultProps`, when present, are validated against this schema at
+   * registration time. Registering a schema without `defaultProps` validates
+   * nothing — there is no value to check until a render supplies props.
+   *
    * The props reach a composition through the URL, so a typo in a query string
    * is a runtime surprise nobody sees until the render is wrong. Registering a
    * schema turns that into a registration-time error.

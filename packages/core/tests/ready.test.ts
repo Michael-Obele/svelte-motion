@@ -143,4 +143,21 @@ describe("resetReadiness", () => {
     expect(isReady()).toBe(true);
     expect(getPendingLabels()).toEqual([]);
   });
+
+  test("resolves pending waiters instead of dropping them", async () => {
+    delayRender("stuck");
+
+    let resolved = false;
+    const waiting = waitForReady().then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    resetReadiness();
+    await waiting;
+
+    expect(resolved).toBe(true);
+  });
 });

@@ -66,9 +66,15 @@ export const waitForReady = (): Promise<void> => {
 
 /** Drops every handle. Test-only escape hatch; never call this mid-render. */
 export const resetReadiness = (): void => {
+  // Settle first: a pending `waitForReady()` would otherwise hang forever once
+  // the handles it was waiting on are gone.
+  for (const waiter of waiters) {
+    waiter();
+  }
+
+  waiters.clear();
   handles.clear();
   pendingLabels.clear();
-  waiters.clear();
 };
 
 /** Installs `window.svelteMotion_ready`, which the renderer polls. */

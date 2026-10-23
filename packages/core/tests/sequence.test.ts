@@ -11,20 +11,53 @@ import { render } from "@testing-library/svelte";
 import { describe, expect, test } from "vite-plus/test";
 import NestedSequences from "./fixtures/NestedSequences.svelte";
 
-/** `data-frame` off the element matching `[data-probe=label]` or `[data-snippet=label]`. */
-const frameOf = (container: HTMLElement, attribute: "probe" | "snippet", label: string): number => {
-  const element = container.querySelector(`[data-${attribute}="${label}"]`);
+/** One attribute off the first element matching `selector`, or a clear error. */
+const attributeOf = (
+  container: HTMLElement,
+  selector: string,
+  attribute: string,
+): string | null => {
+  const element = container.querySelector(selector);
 
   if (element === null) {
-    throw new Error(`No element with data-${attribute}="${label}"`);
+    throw new Error(`No element matching ${selector}`);
   }
 
-  return Number(element.getAttribute("data-frame"));
+  return element.getAttribute(attribute);
+};
+
+/** `data-frame` off the element matching `[data-probe=label]` or `[data-snippet=label]`. */
+const frameOf = (container: HTMLElement, channel: "probe" | "snippet", label: string): number =>
+  Number(attributeOf(container, `[data-${channel}="${label}"]`, "data-frame"));
+
+/**
+ * The two globals `MotionRoot` publishes on mount, read through a guard so a
+ * regression throws with a name instead of "undefined is not a function".
+ */
+const frameBridge = (): {
+  setFrame: (next: number) => Promise<void>;
+  getFrame: () => number;
+} => {
+  const raw = window as unknown as Record<string, unknown>;
+  const { svelteMotion_setFrame: setFrame, svelteMotion_getFrame: getFrame } = raw;
+
+  if (typeof setFrame !== "function") {
+    throw new Error("MotionRoot did not publish window.svelteMotion_setFrame");
+  }
+
+  if (typeof getFrame !== "function") {
+    throw new Error("MotionRoot did not publish window.svelteMotion_getFrame");
+  }
+
+  return {
+    setFrame: setFrame as (next: number) => Promise<void>,
+    getFrame: getFrame as () => number,
+  };
 };
 
 describe("nested Sequence", () => {
   test("at global frame 45 the outer Sequence sees 15 and the inner 5", () => {
-    const { container } = render(NestedSequences, { props: { frame: 45 } });
+    const { container } = render(NestedSequences, { props: { initialFrame: 45 } });
 
     // Snippet channel.
     expect(frameOf(container, "snippet", "outer")).toBe(15);
@@ -37,8 +70,8 @@ describe("nested Sequence", () => {
   });
 
   test("every level agrees between the snippet argument and the context", () => {
-    for (const frame of [40, 45, 60, 90]) {
-      const { container } = render(NestedSequences, { props: { frame } });
+    for (const initialFrame of [40, 45, 60, 90]) {
+      const { container } = render(NestedSequences, { props: { initialFrame } });
 
       expect(frameOf(container, "probe", "outer")).toBe(frameOf(container, "snippet", "outer"));
       expect(frameOf(container, "probe", "inner")).toBe(frameOf(container, "snippet", "inner"));
@@ -46,19 +79,17 @@ describe("nested Sequence", () => {
   });
 
   test("driving the frame the way the renderer does moves every derived local frame", async () => {
-    const { container } = render(NestedSequences, { props: { frame: 45 } });
+    const { container } = render(NestedSequences, { props: { initialFrame: 45 } });
 
     expect(frameOf(container, "probe", "inner")).toBe(5);
 
     // `MotionRoot` publishes this on mount; it is the renderer's only handle on
     // the timeline. It resolves after Svelte flushed *and* after a paint, which
     // is why a screenshot taken straight after it cannot catch the last frame.
-    const setFrame = (window as unknown as Record<string, unknown>).svelteMotion_setFrame as
-      | ((next: number) => Promise<void>)
-      | undefined;
+    const { setFrame } = frameBridge();
 
     expect(typeof setFrame).toBe("function");
-    await setFrame?.(90);
+    await setFrame(90);
 
     expect(frameOf(container, "probe", "root")).toBe(90);
     expect(frameOf(container, "probe", "outer")).toBe(60);
@@ -70,32 +101,32 @@ describe("nested Sequence", () => {
   });
 
   test("MotionRoot publishes the getter the studio uses to read back the frame", async () => {
-    const { container } = render(NestedSequences, { props: { frame: 12 } });
-    const bridge = window as unknown as Record<string, unknown>;
+    const { container } = render(NestedSequences, { props: { initialFrame: 12 } });
+    const { getFrame, setFrame } = frameBridge();
 
-    expect(typeof bridge.svelteMotion_getFrame).toBe("function");
-    expect((bridge.svelteMotion_getFrame as () => number)()).toBe(12);
+    expect(typeof getFrame).toBe("function");
+    expect(getFrame()).toBe(12);
     expect(frameOf(container, "probe", "root")).toBe(12);
 
-    await (bridge.svelteMotion_setFrame as (next: number) => Promise<void>)(33);
-    expect((bridge.svelteMotion_getFrame as () => number)()).toBe(33);
+    await setFrame(33);
+    expect(getFrame()).toBe(33);
   });
 
   test("the video config passes through the context to every level", () => {
-    const { container } = render(NestedSequences, { props: { frame: 45 } });
+    const { container } = render(NestedSequences, { props: { initialFrame: 45 } });
 
     for (const label of ["root", "outer", "inner"]) {
-      const probe = container.querySelector(`[data-probe="${label}"]`);
+      const selector = `[data-probe="${label}"]`;
 
-      expect(probe?.getAttribute("data-fps")).toBe("30");
-      expect(probe?.getAttribute("data-width")).toBe("1920");
-      expect(probe?.getAttribute("data-height")).toBe("1080");
-      expect(probe?.getAttribute("data-duration")).toBe("90");
+      expect(attributeOf(container, selector, "data-fps")).toBe("30");
+      expect(attributeOf(container, selector, "data-width")).toBe("1920");
+      expect(attributeOf(container, selector, "data-height")).toBe("1080");
+      expect(attributeOf(container, selector, "data-duration")).toBe("90");
     }
   });
 
   test("a Sequence that has not started renders nothing", () => {
-    const { container } = render(NestedSequences, { props: { frame: 10 } });
+    const { container } = render(NestedSequences, { props: { initialFrame: 10 } });
 
     // `from={30}` means local frame -20: outside the sequence, so it is hidden.
     expect(container.querySelector('[data-probe="outer"]')).toBeNull();
@@ -107,11 +138,11 @@ describe("nested Sequence", () => {
   });
 
   test("the root frame is the frame it was asked for at mount", () => {
-    const { container } = render(NestedSequences, { props: { frame: 0 } });
-    const root = container.querySelector('[data-probe="root"]');
+    const { container } = render(NestedSequences, { props: { initialFrame: 0 } });
+    const root = '[data-probe="root"]';
 
-    expect(root?.getAttribute("data-frame")).toBe("0");
+    expect(attributeOf(container, root, "data-frame")).toBe("0");
     // `useCurrentFrame()` reads the context once, so it matches at mount too.
-    expect(root?.getAttribute("data-initial-frame")).toBe("0");
+    expect(attributeOf(container, root, "data-initial-frame")).toBe("0");
   });
 });

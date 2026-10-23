@@ -14,8 +14,8 @@
  *   - CSS Color 4 spaces (`oklch`, `oklab`, `lab`, `lch`, `hwb`)
  *   - ragged multi-component strings (`['0px', '100px 50%']`), which Remotion
  *     pads and we reject
- *   - `easing[i] must be a function` validation
- * `tests/parity-exclusions.test.ts` pins the throws we do have.
+ * `tests/parity-exclusions.test.ts` pins the throws we do have, including
+ * `outputType`/`output` and a non-function `easing[i]`.
  */
 
 import { describe, expect, test } from "vite-plus/test";

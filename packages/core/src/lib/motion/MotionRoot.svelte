@@ -6,8 +6,16 @@
    * matters: it resolves only after Svelte has flushed the new frame and the
    * browser has produced a paint, so a screenshot taken right after cannot catch
    * the previous frame.
+   *
+   * Every prop is **init-only**. `fps`, `width`, `height` and
+   * `durationInFrames` describe the video; `initialFrame` is the frame the
+   * composition starts on. Changing any of them after mount does nothing — the
+   * renderer drives the frame through `window.svelteMotion_setFrame`, and the
+   * Player (M4) will drive it with a seek. The reads below are wrapped in
+   * `untrack` to make that intent explicit (and to silence
+   * `state_referenced_locally`), so nobody reads them as reactive.
    */
-  import { onMount, tick, type Snippet } from "svelte";
+  import { onMount, tick, untrack, type Snippet } from "svelte";
   import { MotionContext } from "./context.svelte.js";
   import { setMotionContext, type VideoConfig } from "./context.svelte.js";
   import { installReadinessGlobal } from "./ready.js";
@@ -17,17 +25,17 @@
     width,
     height,
     durationInFrames,
-    frame = 0,
+    initialFrame = 0,
     background = "#000",
     children,
   }: {
     children: Snippet;
-  } & VideoConfig & { frame?: number; background?: string } = $props();
+  } & VideoConfig & { initialFrame?: number; background?: string } = $props();
 
-  const motion = new MotionContext({ fps, width, height, durationInFrames });
+  const motion = untrack(() => new MotionContext({ fps, width, height, durationInFrames }));
   setMotionContext(motion);
 
-  motion.frame = frame;
+  motion.frame = untrack(() => initialFrame);
 
   const nextPaint = (): Promise<void> =>
     new Promise<void>((resolve) => {
@@ -37,6 +45,9 @@
   onMount(() => {
     installReadinessGlobal();
 
+    // `svelteMotion_isPlayer` is owned by the shell that embeds us: the player
+    // sets it through `setSvelteMotionEnvironmentFlag` before the bundle
+    // evaluates. Writing it here would clobber that flag on every mount.
     const bridge = window as unknown as Record<string, unknown>;
     bridge.svelteMotion_setFrame = async (next: number): Promise<void> => {
       motion.frame = next;
@@ -44,7 +55,6 @@
       await nextPaint();
     };
     bridge.svelteMotion_getFrame = (): number => motion.frame;
-    bridge.svelteMotion_isPlayer = false;
 
     return () => {
       delete bridge.svelteMotion_setFrame;

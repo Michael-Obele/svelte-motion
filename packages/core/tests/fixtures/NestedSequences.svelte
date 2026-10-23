@@ -10,10 +10,10 @@
   import Sequence from "../../src/lib/timeline/Sequence.svelte";
   import FrameProbe from "./FrameProbe.svelte";
 
-  let { frame }: { frame: number } = $props();
+  let { initialFrame }: { initialFrame: number } = $props();
 </script>
 
-<MotionRoot fps={30} width={1920} height={1080} durationInFrames={90} {frame}>
+<MotionRoot fps={30} width={1920} height={1080} durationInFrames={90} {initialFrame}>
   <FrameProbe label="root" />
 
   <Sequence from={30}>

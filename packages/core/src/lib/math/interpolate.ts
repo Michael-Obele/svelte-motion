@@ -6,9 +6,13 @@
  * copied line for line because the M1 gate compares output against Remotion.
  *
  * What this file deliberately does NOT port from upstream, because nothing in
- * v1 uses it: the `outputType` CSS sugar (`font-weight`, `transform-origin`,
- * axis rotations, `perceptual-scale`). Passing those is rejected with a clear
- * error rather than silently producing different numbers.
+ * v1 uses it: the `outputType` / `output` CSS sugar (`font-weight`,
+ * `transform-origin`, axis rotations, `perceptual-scale`). Neither key is in
+ * `InterpolateOptions`, and passing either one throws from
+ * `assertNoUnsupportedOutputOptions` rather than being silently ignored.
+ *
+ * `easing` is validated when given as an array: a non-function entry throws,
+ * naming the index, as it does in Remotion.
  */
 
 export type ExtrapolateType = "extend" | "identity" | "clamp" | "wrap";
@@ -449,6 +453,41 @@ const assertValidEasing = (
         `(length inputRange.length - 1 = ${expectedLength}), but got length ${easing.length}`,
     );
   }
+
+  // Cheap to check, and a non-function entry silently yields NaN downstream —
+  // Remotion throws here too.
+  for (const [index, entry] of easing.entries()) {
+    if (typeof entry !== "function") {
+      throw new Error(`easing[${index}] must be a function, but got ${typeof entry}`);
+    }
+  }
+};
+
+/**
+ * The CSS output sugar Remotion accepts and this port does not.
+ *
+ * Keeping the keys out of `InterpolateOptions` makes TypeScript catch them, but
+ * a JavaScript caller would have them dropped on the floor:
+ * `interpolate(0.5, [0, 1], ["normal", "bold"], { outputType: "font-weight" })`
+ * would interpolate the raw strings instead of the weight scale. Throwing is the
+ * only honest option while the mapping is unimplemented.
+ */
+const unsupportedOutputOptionKeys = ["outputType", "output"] as const;
+
+const assertNoUnsupportedOutputOptions = (options: InterpolateOptions | undefined): void => {
+  if (options === undefined) {
+    return;
+  }
+
+  for (const key of unsupportedOutputOptionKeys) {
+    if (key in options) {
+      throw new Error(
+        `interpolate() does not implement the "${key}" option: perceptual-scale and ` +
+          `font-weight output are not ported yet. Interpolate the plain numbers or CSS ` +
+          `strings instead.`,
+      );
+    }
+  }
 };
 
 const assertValidPosterize = (posterize: number | undefined): void => {
@@ -506,6 +545,7 @@ export function interpolate(
   outputRange: readonly InterpolateOutputValue[],
   options?: InterpolateOptions,
 ): InterpolateOutputValue {
+  assertNoUnsupportedOutputOptions(options);
   checkInfiniteRange("inputRange", inputRange);
   checkValidInputRange(inputRange);
   assertValidEasing(options?.easing, inputRange.length);

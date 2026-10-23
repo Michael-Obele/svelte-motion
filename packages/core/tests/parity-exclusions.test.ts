@@ -3,8 +3,17 @@
  *
  * `math.test.ts` only contains Remotion assertions the port actually satisfies.
  * This file pins the *other* side: the inputs Remotion supports and we reject.
- * Without it, "we reject that" is a comment nobody runs, and a silent
- * half-implementation could ship.
+ * These are throws we DO have — each case runs the call and asserts the error,
+ * so "we reject that" cannot rot into a comment nobody executes.
+ *
+ * Two classes of rejection:
+ *   1. Explicit guards for options the port does not implement (`outputType`,
+ *      `output`), so the failure names the option instead of silently ignoring
+ *      it — which is what the file header promises and what the string parser
+ *      alone could not guarantee.
+ *   2. Inputs the port cannot represent (CSS Color 4, ragged strings, a
+ *      non-function `easing` entry), rejected by the code that would otherwise
+ *      produce wrong numbers.
  *
  * Every case below throws a message that tells the author what to do instead.
  */
@@ -29,21 +38,55 @@ describe("CSS Color 4 spaces are rejected, not guessed", () => {
   }
 });
 
-describe("outputType CSS sugar is rejected", () => {
-  test("font-weight keywords are not interpolated", () => {
+describe("outputType / output CSS sugar is rejected by an explicit guard", () => {
+  test("outputType: font-weight keywords are not interpolated", () => {
     // Remotion would return 550 here; we will not guess at the mapping.
     expect(() =>
       interpolate(0.5, [0, 1], ["normal", "bold"], {
         // @ts-expect-error — `outputType` is intentionally not in InterpolateOptions
         outputType: "font-weight",
       }),
-    ).toThrow(/is not a supported scale, translate, or rotate value/);
+    ).toThrow(/does not implement the "outputType" option/);
+  });
+
+  test("output: perceptual-scale is not interpolated", () => {
+    expect(() =>
+      interpolate(0.5, [0, 1], [0, 1], {
+        // @ts-expect-error — `output` is intentionally not in InterpolateOptions
+        output: "perceptual-scale",
+      }),
+    ).toThrow(/does not implement the "output" option/);
+  });
+
+  test("the guard fires before any output is computed, and names the option", () => {
+    // A numeric range is legitimate; only the option makes it throw.
+    expect(interpolate(0.5, [0, 1], [0, 100])).toBe(50);
+
+    expect(() =>
+      interpolate(0.5, [0, 1], [0, 100], {
+        // @ts-expect-error — `outputType` is intentionally not in InterpolateOptions
+        outputType: "perceptual-scale",
+      }),
+    ).toThrow(/perceptual-scale and\s+font-weight output are not ported yet/);
   });
 
   test("transform-origin keywords are not interpolated", () => {
     expect(() => interpolate(0.5, [0, 1], ["left top", "right bottom"])).toThrow(
       /is not a supported scale, translate, or rotate value/,
     );
+  });
+});
+
+describe("a non-function easing entry is rejected", () => {
+  test("easing[1] that is not a function throws and names the index", () => {
+    const double = (t: number): number => t * 2;
+
+    expect(() =>
+      interpolate(5, [0, 10, 20], [0, 10, 20], {
+        // @ts-expect-error — the point of the test: a string is not an easing function
+        easing: [double, "not-a-fn"],
+      }),
+    ).toThrow(/easing\[1\] must be a function/);
   });
 });
 
