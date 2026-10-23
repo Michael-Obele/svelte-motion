@@ -4,6 +4,17 @@
   "keywords": [
     "svelte"
   ],
+  "homepage": "https://github.com/Michael-Obele/svelte-motion#readme",
+  "bugs": {
+    "url": "https://github.com/Michael-Obele/svelte-motion/issues"
+  },
+  "license": "MIT",
+  "author": "Michael-Obele",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Michael-Obele/svelte-motion.git",
+    "directory": "packages/core"
+  },
   "files": [
     "dist",
     "!dist/**/*.test.*",
@@ -24,6 +35,9 @@
       "types": "./dist/index.d.ts",
       "svelte": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "vp dev",
