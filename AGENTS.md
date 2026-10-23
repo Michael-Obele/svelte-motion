@@ -32,24 +32,41 @@ If you need the full spec, read the canonical copy at `AI-Plans/plans/svelte-mot
 
 ```
 Author writes Svelte composition (frame -> pixels)
-  -> Vite 6 + SvelteKit 2 bundles to browser JS
+  -> Vite 8 (via @voidzero-dev/vite-plus-core) + SvelteKit 3 bundles to browser JS
   -> dev: SvelteKit dev server + Studio (scrubber, timeline)
   -> render: Playwright launches headless Chromium
            -> for frame 0..N: set frame, wait ready, screenshot PNG
            -> FFmpeg via Bun.spawn stitches PNGs to MP4
 ```
 
-Module layout (product repo, scaffolded with `bunx sv create`):
+Module layout — a Vite+ workspace with Bun workspaces, scaffolded by the `vp` CLI:
 
 ```
-src/lib/motion/      # context.svelte.ts, config.ts, composition.ts, ready.ts, asset.ts
-src/lib/timeline/    # Sequence.svelte, Series.svelte, Loop.svelte, Freeze.svelte
-src/lib/math/        # interpolate.ts, spring.ts, easing.ts (pure TS, no Svelte dep)
-src/lib/player/      # Player.svelte, PlayerControls.svelte
-src/lib/renderer/    # browser.ts, ffmpeg.ts, render.ts, assets.ts
-src/lib/studio/      # Timeline.svelte, Scrubber.svelte, Preview.svelte
-compositions/        # user videos — each a .svelte file + defineComposition entry
+packages/core/       # @svelte-motion/core      browser-only: motion/, timeline/, math/, player/
+                     #                          built with svelte-package (tsdown cannot compile .svelte)
+packages/renderer/   # @svelte-motion/renderer  node-only: browser.ts, ffmpeg.ts, render.ts, assets.ts
+packages/cli/        # @svelte-motion/cli       bin; standalone executable later via pack.exe
+apps/studio/         # SvelteKit dev server: Timeline, Scrubber, Preview
+apps/web/            # homepage + docs (SvelteKit + shadcn-svelte)
+examples/            # compositions consumed by studio, docs, and renderer tests (not yet created)
 ```
+
+The split is a hard boundary, not tidiness: the renderer shells out to Playwright and FFmpeg, so
+it must never be reachable from a browser bundle. `core` stays free of Node built-ins; anything
+that needs the filesystem belongs in `renderer`.
+
+Workspace commands (`vp` is Vite+, `vpr` is `vp run`):
+
+```bash
+vp run -r build        # recursive, cache-aware build of every member
+vp run studio#dev      # one member by package name
+vp -C apps/studio dev  # one member by directory
+vp check               # fmt + lint + typecheck across the workspace
+vp run -r test         # every member's tests
+```
+
+`vp check` and `vp fmt` read lint/format settings **only** from the root `vite.config.ts`;
+per-package `lint`/`fmt` blocks are ignored, so package-specific rules belong in `overrides`.
 
 See `plan/architecture.md` for the full component table, interfaces, and failure modes.
 
@@ -63,8 +80,10 @@ See `plan/architecture.md` for the full component table, interfaces, and failure
 - **D6** Playwright over Puppeteer (multi-browser, stable screenshot API).
 - **D7** `Bun.spawn` for FFmpeg (stdin streaming).
 - **D8** Valibot for props validation (Zod accepted as alternative).
+- **D15** Vite+ (`vp`) monorepo on Bun workspaces, five members, `@svelte-motion/*` scope — supersedes D11. See `plan/decisions.md` for the scaffold-time version findings.
 
-Open questions live in `plan/decisions.md`: SvelteKit 2 vs 3 at scaffold time, Studio timeline scope, system FFmpeg vs shipped binaries, Zod acceptance.
+Open questions live in `plan/decisions.md`: Studio timeline scope, system FFmpeg vs shipped binaries, Zod acceptance.
+SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path.
 
 ## Rendering pipeline (determinism is the gate)
 
