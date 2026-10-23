@@ -1,1 +1,67 @@
-// Reexport your entry components here
+/**
+ * `@svelte-motion/core` — the public surface.
+ *
+ * Three layers, in dependency order:
+ *
+ * - `math` — pure TypeScript, no Svelte, no DOM. Frame-to-value mapping.
+ * - `motion` — the frame runtime: context, composition registry, readiness.
+ * - `timeline` — the components that narrow the frame their children see.
+ *
+ * Everything here is browser-only. Node built-ins belong in
+ * `@svelte-motion/renderer`, which consumes this package.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* Math                                                                        */
+/* -------------------------------------------------------------------------- */
+
+// Mirrors `math/index.ts` exactly; that file is the curated list.
+export * from "./math/index.js";
+
+/* -------------------------------------------------------------------------- */
+/* Motion runtime                                                              */
+/* -------------------------------------------------------------------------- */
+
+export {
+  DerivedMotionContext,
+  MotionContext,
+  getMotionContext,
+  setMotionContext,
+  useCurrentFrame,
+  useVideoConfig,
+  type MotionState,
+  type VideoConfig,
+} from "./motion/context.svelte.js";
+
+export { default as MotionRoot } from "./motion/MotionRoot.svelte";
+
+export {
+  clearCompositions,
+  collectCompositions,
+  defineComposition,
+  getComposition,
+  getCompositions,
+  type CompositionConfig,
+} from "./motion/composition.js";
+
+export {
+  continueRender,
+  delayRender,
+  getPendingLabels,
+  installReadinessGlobal,
+  isReady,
+  resetReadiness,
+  waitForReady,
+} from "./motion/ready.js";
+
+export {
+  getSvelteMotionEnvironment,
+  setSvelteMotionEnvironmentFlag,
+  type SvelteMotionEnvironment,
+} from "./motion/env.js";
+
+/* -------------------------------------------------------------------------- */
+/* Timeline                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export * from "./timeline/index.js";

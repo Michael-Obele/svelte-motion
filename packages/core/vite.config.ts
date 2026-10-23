@@ -18,4 +18,12 @@ export default defineConfig({
       adapter: adapter(),
     }),
   ]),
+  // Component tests mount real Svelte components, so the test run needs the
+  // browser build of `svelte` rather than the server one that SSR resolution
+  // would otherwise pick.
+  resolve: process.env.VITEST ? { conditions: ["browser"] } : undefined,
+
+  test: {
+    environment: "jsdom",
+  },
 });
