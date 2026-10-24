@@ -550,6 +550,12 @@ describe("renderComposition (e2e)", () => {
     { id: "lower-third", frames: 120 },
     { id: "image-gallery", frames: 120 },
     { id: "data-chart", frames: 150 },
+    // Tailwind examples. They also prove the studio's `@source` directive
+    // reaches outside the app root, because none of their utilities exist in
+    // the studio's own markup.
+    { id: "stat-grid", frames: 120 },
+    { id: "quote-series", frames: 150 },
+    { id: "loop-ticker", frames: 120 },
   ] as const;
 
   for (const example of examples) {

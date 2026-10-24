@@ -134,18 +134,27 @@ Full API references live in the package READMEs: [core](packages/core/README.md)
 
 ## Examples
 
-Four runnable compositions live in [`examples/`](examples/README.md):
+Seven runnable compositions live in [`examples/`](examples/README.md). Four use scoped
+CSS, three use Tailwind, and together they cover every timeline primitive:
 
 - `title-card`: spring entrance, a rule that draws, staged timing with `Sequence`
 - `lower-third`: a graphic sliding in and out inside one `Sequence`
 - `image-gallery`: three images cross-fading with `prefetch` and a slow scale
 - `data-chart`: bars from a JSON file fetched under `delayRender`, with a valibot schema
+- `stat-grid` (Tailwind): cards on a grid, staggered springs, numbers that count up
+- `quote-series` (Tailwind): `Series` stepping through a quote, one line at a time
+- `loop-ticker` (Tailwind): `Loop` driving an endless ticker with no timer
 
-Run `vp run studio#dev` and pick one, or render it:
+Run everything from the repository root, because the CLI path and `--build` are
+relative to it:
 
 ```bash
+# See them in the studio, then pick one from the sidebar
+vp run studio#dev
+
+# Or render one to a file
 vp run studio#build
-bun packages/cli/src/index.ts render title-card --out out/title-card.mp4 --build apps/studio/build
+bun packages/cli/src/index.ts render stat-grid --out out/stat-grid.mp4 --build apps/studio/build
 ```
 
 ## How it works
@@ -169,14 +178,23 @@ tools/spike         determinism and parity gates
 
 ## Gates
 
-Determinism is a test here, not a promise:
+Determinism is a test here, not a promise. Run these from the repository root:
 
 ```bash
-vp check                                    # fmt, lint, typecheck
-vp run -r test                              # unit tests, every member
-bun run tools/spike/verify-determinism.ts   # same frames, same MP4 bytes
-bun run tools/spike/verify-player-parity.ts # player frame equals rendered frame
-cd packages/renderer && SM_E2E=1 vp test    # full render gates
+vp check                                     # fmt, lint, typecheck
+vp run -r test                               # unit tests, every member
+bun run tools/spike/verify-determinism.ts    # same frames, same MP4 bytes
+bun run tools/spike/verify-player-parity.ts  # player frame equals rendered frame
+```
+
+The end-to-end renders are opt-in because they take a few minutes and need a studio
+build. Each runs inside its package, so `SM_E2E=1` is not swallowed by the task cache:
+
+```bash
+vp run studio#build
+cd packages/renderer && SM_E2E=1 vp test    # render, determinism, parity, examples
+cd ../cli && SM_E2E=1 vp test               # CLI commands end to end
+cd ../..
 ```
 
 ## Contributing

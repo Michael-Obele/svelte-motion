@@ -66,6 +66,6 @@
   });
 </script>
 
-<Stage {width} {height} background>
+<Stage {width} {height} {background}>
   {@render children()}
 </Stage>

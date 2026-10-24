@@ -1,6 +1,14 @@
 @import "tailwindcss";
 
 /*
+ * The examples live outside this app's root, so Tailwind's automatic source
+ * detection (which follows the CSS file's location) never sees their classes.
+ * `@source` adds the folder explicitly. It is a scan path only: nothing is
+ * imported from there unless a route globs it.
+ */
+@source "../../../examples";
+
+/*
  * Screenshot fidelity.
  *
  * The studio is a render host: whatever the browser draws around the composition

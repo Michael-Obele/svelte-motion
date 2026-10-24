@@ -6,7 +6,7 @@
    * restarts every `durationInFrames`. Omit `times` to loop for the rest of the
    * composition.
    */
-  import type { Snippet } from "svelte";
+  import { untrack, type Snippet } from "svelte";
   import {
     DerivedMotionContext,
     getMotionContext,
@@ -25,11 +25,15 @@
     children: Snippet<[{ frame: number }]>;
   } = $props();
 
-  if (!Number.isInteger(durationInFrames) || durationInFrames <= 0) {
-    throw new Error(
-      `<Loop> needs a positive integer durationInFrames, but got ${durationInFrames}`,
-    );
-  }
+  // Read once, at init. The prop is not meant to change over a render, and a
+  // bare read here would trip `state_referenced_locally`.
+  untrack(() => {
+    if (!Number.isInteger(durationInFrames) || durationInFrames <= 0) {
+      throw new Error(
+        `<Loop> needs a positive integer durationInFrames, but got ${durationInFrames}`,
+      );
+    }
+  });
 
   const wrap = (value: number): number =>
     ((value % durationInFrames) + durationInFrames) % durationInFrames;
