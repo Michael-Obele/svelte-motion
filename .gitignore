@@ -39,3 +39,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Rendered video. Never commit output: it is megabytes of derived file, and a
+# binary in git cannot be diffed or reviewed.
+out/
+*.mp4

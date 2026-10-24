@@ -15,5 +15,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["determinism.ts"]
+  "include": ["determinism.ts", "render-demo.ts"]
 }

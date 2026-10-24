@@ -12,7 +12,8 @@
     "ready": "vp check && vp run -r test && vp run -r build",
     "dev": "vp run studio#dev",
     "dev:web": "vp run web#dev",
-    "spike": "vp run studio#build && bun run tools/spike/determinism.ts"
+    "spike": "vp run studio#build && bun run tools/spike/determinism.ts",
+    "render-demo": "bun run tools/spike/render-demo.ts"
   },
   "devDependencies": {
     "vite": "catalog:",
