@@ -32,7 +32,7 @@ If you need the full spec, read the canonical copy at `AI-Plans/plans/svelte-mot
 
 ```
 Author writes Svelte composition (frame -> pixels)
-  -> Vite 8 (via @voidzero-dev/vite-plus-core) + SvelteKit 3 bundles to browser JS
+  -> Vite+ 1.4 (via @voidzero-dev/vite-plus-core 1.4.0) + SvelteKit 3.1 + Bun 1.4.4 bundles to browser JS
   -> dev: SvelteKit dev server + Studio (scrubber, timeline)
   -> render: Playwright launches headless Chromium
            -> for frame 0..N: set frame, wait ready, screenshot PNG
@@ -62,7 +62,11 @@ vp run -r build        # recursive, cache-aware build of every member
 vp run studio#dev      # one member by package name
 vp -C apps/studio dev  # one member by directory
 vp check               # fmt + lint + typecheck across the workspace
-vp run -r test         # every member's tests
+vp run -r test         # every member's tests (cached)
+vp run studio#build    # build the Studio for rendering
+SM_E2E=1 vp test       # per-package e2e, run inside the package dir (vp run cache ignores env vars)
+bun run tools/spike/verify-determinism.ts  # M0 determinism gate
+bun run tools/spike/verify-player-parity.ts  # M4 player parity gate
 ```
 
 `vp check` and `vp fmt` read lint/format settings **only** from the root `vite.config.ts`;
@@ -74,7 +78,7 @@ See `plan/architecture.md` for the full component table, interfaces, and failure
 
 - **D1** Start clean from `bunx sv create`, copy MIT math helpers only — don't fork `svelte-in-motion`.
 - **D2** Svelte 5 runes only (`$state`, `$derived`, `$effect`, `$props`, snippets).
-- **D3** SvelteKit + Vite 6 (routing, adapters, `adapter-static` for render).
+- **D3** SvelteKit 3.1 + Vite+ 1.4 + Bun 1.4.4 (routing, adapters, `adapter-static` for render). Confirmed at scaffold, not Vite 6 or SvelteKit 2.
 - **D4** Vite for bundling, not Webpack.
 - **D5** `delayRender`/`continueRender` + `ready` boolean (same counter, two APIs).
 - **D6** Playwright over Puppeteer (multi-browser, stable screenshot API).
@@ -87,12 +91,14 @@ SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path.
 
 ## Rendering pipeline (determinism is the gate)
 
-1. **Bundle** — `bun run build` via Vite + `vite-plugin-svelte` + `adapter-static` to `build/`.
-2. **Serve** — `bun run preview -- --port 4173` on a dedicated port (no HMR).
-3. **Capture** — Playwright `page.goto('...?composition=id&frame=N')` → wait `svelteMotion_ready()` + `document.fonts.ready` + `networkidle` → `page.screenshot({ clip })`.
-4. **Encode** — `Bun.spawn` FFmpeg: `ffmpeg -framerate 30 -i frame%04d.png -c:v libx264 -pix_fmt yuv420p out.mp4`.
+1. **Bundle** — `vp run studio#build` via Vite + `vite-plugin-svelte` + `adapter-static` to `apps/studio/build/`.
+2. **Serve** — `Bun.serve` on `127.0.0.1` with SPA fallback to `index.html` (no HMR, no `vite preview`).
+3. **Capture** — Playwright `page.goto('.../render?composition=id&frame=N')` → wait `svelteMotion_ready()` + `document.fonts.ready` → `page.screenshot({ clip })`.
+4. **Encode** — `Bun.spawn` FFmpeg image2pipe: `ffmpeg -framerate 30 -f image2pipe -vcodec png -i pipe:0 -c:v libx264 -pix_fmt yuv420p -map_metadata -1 -fflags +bitexact out.mp4`.
 
 Rules: frames must be pure functions of `frame` (no `Math.random`/`Date.now`), `window.svelteMotion_*` globals drive the renderer, kill the server in `finally`.
+
+Render gates: M0 determinism (`tools/spike/verify-determinism.ts` screenshots frame 0 and 90 twice, byte equality), M2 MP4 byte equality (same render twice produces identical bytes), M4 player parity (`tools/spike/verify-player-parity.ts` compares Player PNG to renderer PNG at same frame).
 
 See `plan/rendering.md` for concurrency, asset prefetch, and `delayRender` timeout handling.
 
@@ -113,15 +119,15 @@ See `plan/svelte-mapping.md` for the full table and snippet examples.
 
 ## Milestones (M0–M6)
 
-| Milestone | Title                | Gate                                                                                  |
-| --------- | -------------------- | ------------------------------------------------------------------------------------- |
-| M0        | Recon and the spike  | Same component screenshots identically at frame 0 and 90, determinism holds           |
-| M1        | Math and timeline    | `interpolate`/`spring`/`Sequence` match Remotion output, tests pass                   |
-| M2        | Renderer CLI         | `svelte-motion render hello-world --out out.mp4` produces 3s MP4, frame count matches |
-| M3        | Assets and readiness | Font-heavy composition with `delayRender` renders without blank frames                |
-| M4        | Player               | `Player` plays at `fps` with scrubber, preview matches renderer PNG                   |
-| M5        | Studio               | Composition picker, preview, scrubber, timeline with nesting                          |
-| M6        | Polish, docs, skills | Docs, agent skills, Valibot props, CLI help, `bun test` pass                          |
+| Milestone | Title                | Gate                                                                                  | Status    |
+| --------- | -------------------- | ------------------------------------------------------------------------------------- | --------- |
+| M0        | Recon and the spike  | Same component screenshots identically at frame 0 and 90, determinism holds           | done      |
+| M1        | Math and timeline    | `interpolate`/`spring`/`Sequence` match Remotion output, tests pass                   | done      |
+| M2        | Renderer CLI         | `svelte-motion render hello-world --out out.mp4` produces 3s MP4, frame count matches | done      |
+| M3        | Assets and readiness | Font-heavy composition with `delayRender` renders without blank frames                | done      |
+| M4        | Player               | `Player` plays at `fps` with scrubber, preview matches renderer PNG                   | done      |
+| M5        | Studio               | Composition picker, preview, scrubber, timeline with nesting                          | done      |
+| M6        | Polish, docs, skills | Docs, agent skills, Valibot props, CLI help, `bun test` pass                          | this task |
 
 See `plan/milestones.md` for commands and done-when checklists.
 
@@ -132,6 +138,7 @@ See `plan/milestones.md` for commands and done-when checklists.
 - Frame runtime is the single source of truth: `frame` as `$state`, derived values as `$derived`, never assign to `$state` inside `$effect` for frame math.
 - Determinism gate blocks everything: no wall clock, no randomness in compositions.
 - Prefer `Bun.spawn` and Valibot per stack decisions; document any deviation in `plan/decisions.md`.
+- Svelte 5 constraint: named component prop types must live in `.ts` files (`timeline/types.ts`, `player/types.ts`). Components export only the default, `svelte-check` cannot see named exports from `.svelte` files.
 
 ## Where to look next
 

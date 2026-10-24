@@ -1,56 +1,39 @@
-# sv
+# Web
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Landing and docs shell for svelte-motion. A minimal SvelteKit app that links to the Studio and the GitHub repo.
 
-## Creating a project
+## What it is
 
-If you're seeing this, you've probably already done this step. Congrats!
+A single page at `/` with a heading, a short description, and links to GitHub and Studio docs. No compositions, no renderer, no player. It exists so the monorepo has a place for marketing and documentation that is separate from the Studio.
 
-```sh
-# create a new project
-npx sv create my-app
+## Run
+
+```bash
+vp run web#dev
+# SvelteKit dev server, default http://localhost:5173 (or next free port if Studio is running)
+vp run web#build
+# Static build to apps/web/build
 ```
 
-To recreate this project with the same configuration:
+## Structure
 
-```sh
-# recreate this project
-npx sv@1.1.1 create --template minimal --types ts --no-install web
+```
+apps/web/
+  src/
+    routes/
+      +page.svelte    # Landing page
+      +layout.svelte  # Root layout
+    app.css           # Tailwind entry
+    app.html          # HTML shell
+  static/
+    robots.txt
+  vite.config.ts      # SvelteKit + Tailwind + adapter-auto
 ```
 
-## Adding features
+## Styling
 
-Add features to your project with `sv add`:
+Tailwind CSS v4 with `@tailwindcss/vite`, same as Studio. The web app is the other place Tailwind is used. `@svelte-motion/core` has no Tailwind dependency.
 
-```sh
-npx sv add
-```
+## License
 
-For example, to add Tailwind CSS:
-
-```sh
-npx sv add tailwindcss
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+MIT

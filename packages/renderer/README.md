@@ -1,23 +1,147 @@
-# vite-plus-starter
+# @svelte-motion/renderer
 
-A starter for creating a Vite Plus project.
+Node-only engine that turns a built Studio into an MP4. Serves the build, drives headless Chromium, screenshots each frame, and pipes PNGs to FFmpeg.
 
-## Development
+Browser code lives in `@svelte-motion/core`. This package must never be imported in a browser bundle.
 
-- Install dependencies:
-
-```bash
-vp install
-```
-
-- Run the unit tests:
+## Install
 
 ```bash
-vp test
+bun add @svelte-motion/renderer
 ```
 
-- Build the library:
+Requirements: `ffmpeg` on PATH and Playwright Chromium (`bunx playwright install chromium`).
 
-```bash
-vp pack
+## Quickstart
+
+```ts
+import { renderComposition } from "@svelte-motion/renderer";
+
+const result = await renderComposition({
+  buildDir: "apps/studio/build",
+  compositionId: "hello-world",
+  out: "out/hello-world.mp4",
+});
+
+console.log(result);
+// { frameCount: 90, fps: 30, width: 1920, height: 1080, durationInFrames: 90, out: "out/hello-world.mp4", warnings: [], readyMs: 123 }
 ```
+
+## Pipeline
+
+Five steps, every render:
+
+1. Serve the build directory with `Bun.serve` on `127.0.0.1` with SPA fallback to `index.html`.
+2. Open `/render?composition=<id>&frame=0&props=<json>` in headless Chromium.
+3. Await `window.svelteMotion_setFrame(n)` which resolves after Svelte flush and paint.
+4. Screenshot the composition clip at its `width` and `height`.
+5. Pipe PNGs to FFmpeg via `image2pipe` and encode to MP4.
+
+## API
+
+### Build server
+
+```ts
+import { serveBuild } from "@svelte-motion/renderer";
+const server = await serveBuild(buildDir, port);
+// server.url, server.port, server.stop()
+```
+
+| Export       | Signature                                                   | Notes                                                                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serveBuild` | `(buildDir: string, port?: number) => Promise<BuildServer>` | Serves `buildDir` on loopback. Port `0` asks the OS for a free port. Rejects if `index.html` is missing. `BuildServer` is `{ url, port, stop }`. Unknown paths fall back to `index.html` for SPA routing. |
+
+### Browser
+
+```ts
+import { launchBrowser, CHROMIUM_DETERMINISM_FLAGS } from "@svelte-motion/renderer";
+```
+
+| Export                                             | Purpose                                                                                                                                                  |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `launchBrowser()`                                  | Launches headless Chromium with determinism flags. Caller owns `close()`.                                                                                |
+| `CHROMIUM_DETERMINISM_FLAGS`                       | Flags that keep two runs byte identical: `--disable-lcd-text, --font-render-hinting=none, --force-color-profile=srgb, --disable-gpu, --hide-scrollbars`. |
+| `DEFAULT_READY_TIMEOUT_MS`                         | Default ready timeout, `30000`.                                                                                                                          |
+| `gotoComposition(page, url, id, props?)`           | Navigates to `/render?composition=<id>&frame=0` without waiting for readiness. Waits for the composition registry bridge.                                |
+| `waitForReady(page, timeoutMs, id?, frame?)`       | Polls `window.svelteMotion_ready()` until true or timeout. Includes pending handles in the error.                                                        |
+| `waitForReadyAndFonts(page, id, timeoutMs)`        | `waitForReady` plus `document.fonts.ready`.                                                                                                              |
+| `openComposition(page, url, id, props, timeoutMs)` | `gotoComposition` plus `waitForReadyAndFonts`.                                                                                                           |
+| `hasCompositionBridge(page)`                       | True when `window.svelteMotion_getCompositions` exists.                                                                                                  |
+| `getCompositionsFromPage(page)`                    | Reads the registry the page publishes, projected to `PageComposition`.                                                                                   |
+| `captureFrame(page, frame, size, timeoutMs, id?)`  | Calls `window.svelteMotion_setFrame(frame)`, waits for ready and fonts, screenshots the clip. Returns PNG bytes.                                         |
+
+Types: `PageComposition { id, width, height, fps, durationInFrames, defaultProps? }`, `FrameSize { width, height }`.
+
+### FFmpeg
+
+```ts
+import { checkFfmpeg, buildFfmpegArgs, encodeWithFFmpeg } from "@svelte-motion/renderer";
+```
+
+| Export                              | Signature                                        | Notes                                                                                                                |
+| ----------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `checkFfmpeg()`                     | `() => Promise<boolean>`                         | True when `ffmpeg -version` exits 0.                                                                                 |
+| `buildFfmpegArgs(options)`          | `(EncodeOptions) => string[]`                    | Builds argv for `image2pipe` input. Order is load bearing, `-framerate` before `-i pipe:0`. Includes bitexact flags. |
+| `encodeWithFFmpeg(frames, options)` | `(Uint8Array[], EncodeOptions) => Promise<void>` | Pipes PNGs to FFmpeg stdin. Throws with tail of stderr on failure.                                                   |
+
+`EncodeOptions { out, fps, crf?, codec?, preset? }`. Defaults: `crf 18`, `codec libx264`, `preset medium`, `pix_fmt yuv420p`.
+
+### Chunking
+
+```ts
+import { chunkRange } from "@svelte-motion/renderer";
+chunkRange(0, 90, 2); // [{ start: 0, end: 45 }, { start: 45, end: 90 }]
+```
+
+Splits `[start, end)` into contiguous non overlapping ranges for parallel capture. Remainder is distributed over the first chunks. Empty or inverted ranges return `[]`. Concurrency below 1 is treated as 1.
+
+### Render
+
+```ts
+import { renderComposition } from "@svelte-motion/renderer";
+```
+
+`RenderOptions`:
+
+| Field            | Type                      | Default   | Notes                                              |
+| ---------------- | ------------------------- | --------- | -------------------------------------------------- |
+| `buildDir`       | `string`                  | required  | Directory holding the built Studio                 |
+| `compositionId`  | `string`                  | required  | Registry id, for example `hello-world`             |
+| `out`            | `string`                  | required  | Destination MP4 path, parent must exist            |
+| `props`          | `Record<string, unknown>` | —         | Passed through `?props=` as URL encoded JSON       |
+| `port`           | `number`                  | `0`       | Build server port, 0 is OS assigned                |
+| `concurrency`    | `number`                  | `1`       | Parallel chunks, each gets its own browser context |
+| `crf`            | `number`                  | `18`      | H.264 quality, lower is better                     |
+| `codec`          | `string`                  | `libx264` | Video codec for `-c:v`                             |
+| `preset`         | `string`                  | `medium`  | Encoder preset                                     |
+| `readyTimeoutMs` | `number`                  | `30000`   | How long to wait for readiness per frame           |
+| `onProgress`     | `(done, total) => void`   | —         | Called after each captured frame                   |
+
+`RenderResult { frameCount, fps, width, height, durationInFrames, out, warnings, readyMs }`. Warnings are deduped `[svelte-motion]` console messages, capped at 50. `readyMs` is time spent waiting for readiness during the probe.
+
+Errors: missing ffmpeg, unknown composition id (lists available ids), page never booted (no registry bridge), props validation failure, frame never ready (names pending handles), FFmpeg non zero exit.
+
+## Determinism
+
+Two renders of the same composition must produce byte identical MP4s. Three things make that possible:
+
+- Chromium flags disable LCD subpixel antialiasing and force sRGB and no GPU compositing.
+- FFmpeg flags ` -map_metadata -1 -fflags +bitexact -flags:v +bitexact` stop the muxer from stamping creation time and encoder version.
+- The renderer waits for `window.svelteMotion_ready()` and `document.fonts.ready` before every screenshot, including after each `setFrame`.
+
+The M0 gate checks this by screenshotting frame 0 and frame 90 twice and comparing bytes.
+
+## Requirements
+
+- `ffmpeg` on PATH. Install with `apt install ffmpeg` or `brew install ffmpeg`.
+- Playwright Chromium. Install with `bunx playwright install chromium`.
+
+## Limits
+
+- Concurrency defaults to 1. Higher values cost one browser context per chunk.
+- Video only. Audio elements are not muxed into the output in v1.
+- The build server binds to `127.0.0.1` only.
+
+## License
+
+MIT
