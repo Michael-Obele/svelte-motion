@@ -28,6 +28,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
 import { renderComposition, serveBuild } from "../src/index.ts";
+import { launchBrowser, openComposition } from "../src/index.ts";
 import { installBunShim } from "./bun-shim.ts";
 
 /* Three levels up from `packages/renderer/tests/` — the repo root. */
@@ -276,9 +277,61 @@ describe("renderComposition (e2e)", () => {
 
         const file = Bun.file(out);
         expect(await file.exists()).toBe(true);
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        // Frame 0 is not blank — PNG size > 50_000 bytes for 1920x1080
-        expect(bytes.length).toBeGreaterThan(50_000);
+
+        // Decode frame 0 instead of measuring the MP4: this scene is static, so
+        // H.264 compresses 60 frames into ~12 KB, and container size says
+        // nothing about whether a frame has content. A blank 1920x1080 PNG is a
+        // few KB; this frame (checker image + 64 px title) is ~36 KB.
+        const framePng = join(dir, "frame0.png");
+        const extract = Bun.spawn(
+          [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-i",
+            out,
+            "-vf",
+            "select=eq(n\\,0)",
+            "-frames:v",
+            "1",
+            framePng,
+          ],
+          { stdout: "ignore", stderr: "pipe" },
+        );
+        expect(await extract.exited).toBe(0);
+
+        const pngBytes = new Uint8Array(await Bun.file(framePng).arrayBuffer());
+        expect(pngBytes.length).toBeGreaterThan(10_000);
+
+        // "Correct font, no fallback flash" is only provable in the DOM: the
+        // composition marks itself after `document.fonts.check()` resolves.
+        const server = await serveBuild(BUILD_DIR, 0);
+        const browser = await launchBrowser();
+
+        try {
+          const context = await browser.newContext({
+            viewport: { width: 1920, height: 1080 },
+            deviceScaleFactor: 1,
+          });
+          const page = await context.newPage();
+          await openComposition(page, server.url, "fixture-font-heavy");
+
+          const fontState = await page.evaluate(() => {
+            const title = document.querySelector(".fixture-title");
+
+            return {
+              ready: title?.getAttribute("data-font-ready") ?? null,
+              family: title === null ? "" : getComputedStyle(title).fontFamily,
+            };
+          });
+
+          expect(fontState.ready).toBe("true");
+          expect(fontState.family).toContain("FixtureFont");
+        } finally {
+          await browser.close();
+          server.stop();
+        }
 
         const probe = await probeVideo(out);
         expect(probe.frameCount).toBe(60);
