@@ -416,6 +416,10 @@ async function runRender(command: RenderCommand): Promise<void> {
   console.log(
     `${command.compositionId} → ${command.out} (${result.frameCount} frames, ${result.width}x${result.height} @ ${result.fps}fps, ${seconds}s)`,
   );
+
+  for (const warning of result.warnings) {
+    console.error(`warning: ${warning}`);
+  }
 }
 
 export async function main(argv: string[]): Promise<void> {

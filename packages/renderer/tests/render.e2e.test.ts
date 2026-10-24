@@ -152,7 +152,7 @@ describe("renderComposition (e2e)", () => {
           out: first,
         });
 
-        expect(result).toEqual({
+        expect(result).toMatchObject({
           frameCount: EXPECTED_FRAMES,
           fps: 30,
           width: 1920,
@@ -160,6 +160,8 @@ describe("renderComposition (e2e)", () => {
           durationInFrames: EXPECTED_FRAMES,
           out: first,
         });
+        expect(result.warnings).toEqual([]);
+        expect(typeof result.readyMs).toBe("number");
 
         const probe = await probeVideo(first);
 
@@ -247,6 +249,136 @@ describe("renderComposition (e2e)", () => {
         expect(contentType).toMatch(/javascript/i);
       } finally {
         server.stop();
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "fixture-font-heavy renders with no warnings and MP4 exists",
+    async () => {
+      await requireStudioBuild();
+
+      const dir = await makeTempDir();
+      const out = join(dir, "out.mp4");
+
+      try {
+        const result = await renderComposition({
+          buildDir: BUILD_DIR,
+          compositionId: "fixture-font-heavy",
+          out,
+        });
+
+        expect(result.frameCount).toBe(60);
+        expect(result.warnings).toEqual([]);
+        expect(typeof result.readyMs).toBe("number");
+        expect(result.readyMs).toBeGreaterThanOrEqual(0);
+
+        const file = Bun.file(out);
+        expect(await file.exists()).toBe(true);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        // Frame 0 is not blank — PNG size > 50_000 bytes for 1920x1080
+        expect(bytes.length).toBeGreaterThan(50_000);
+
+        const probe = await probeVideo(out);
+        expect(probe.frameCount).toBe(60);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "fixture-missing-asset renders with one warning and MP4 still exists",
+    async () => {
+      await requireStudioBuild();
+
+      const dir = await makeTempDir();
+      const out = join(dir, "out.mp4");
+
+      try {
+        const result = await renderComposition({
+          buildDir: BUILD_DIR,
+          compositionId: "fixture-missing-asset",
+          out,
+        });
+
+        expect(result.frameCount).toBe(30);
+        expect(result.warnings.length).toBe(1);
+        expect(result.warnings[0]).toMatch(/does-not-exist\.png/);
+
+        const file = Bun.file(out);
+        expect(await file.exists()).toBe(true);
+
+        const probe = await probeVideo(out);
+        expect(probe.frameCount).toBe(30);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "fixture-stuck with readyTimeoutMs 2000 rejects with pending handle label",
+    async () => {
+      await requireStudioBuild();
+
+      const dir = await makeTempDir();
+
+      try {
+        const start = performance.now();
+        const error = await renderComposition({
+          buildDir: BUILD_DIR,
+          compositionId: "fixture-stuck",
+          out: join(dir, "out.mp4"),
+          readyTimeoutMs: 2000,
+        }).then(
+          () => undefined,
+          (thrown: unknown) => thrown,
+        );
+        const elapsed = performance.now() - start;
+
+        expect(error).toBeInstanceOf(Error);
+        const message = error instanceof Error ? error.message : "";
+        expect(message).toMatch(/e2e-stuck-fixture/);
+        expect(message).toMatch(/fixture-stuck/);
+        expect(message).toMatch(/frame/i);
+        expect(elapsed).toBeLessThan(10_000);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "invalid props for fixture-font-heavy rejects with title path",
+    async () => {
+      await requireStudioBuild();
+
+      const dir = await makeTempDir();
+
+      try {
+        const start = performance.now();
+        const error = await renderComposition({
+          buildDir: BUILD_DIR,
+          compositionId: "fixture-font-heavy",
+          out: join(dir, "out.mp4"),
+          props: { title: 123 as unknown as string },
+        }).then(
+          () => undefined,
+          (thrown: unknown) => thrown,
+        );
+        const elapsed = performance.now() - start;
+
+        expect(error).toBeInstanceOf(Error);
+        const message = error instanceof Error ? error.message : "";
+        expect(message).toMatch(/title/);
+        expect(elapsed).toBeLessThan(10_000);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
       }
     },
     TIMEOUT_MS,

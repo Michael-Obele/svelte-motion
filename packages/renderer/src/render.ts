@@ -22,6 +22,7 @@
 import type { Browser } from "playwright";
 import {
   captureFrame,
+  DEFAULT_READY_TIMEOUT_MS,
   getCompositionsFromPage,
   gotoComposition,
   hasCompositionBridge,
@@ -59,6 +60,8 @@ export type RenderOptions = {
   preset?: string;
   /** Called after each captured frame with the running and expected totals. */
   onProgress?: (done: number, total: number) => void;
+  /** How long to wait for readiness before failing. Defaults to 30_000. */
+  readyTimeoutMs?: number;
 };
 
 /** What a render produced. Mirrors the composition, plus where it landed. */
@@ -70,6 +73,10 @@ export type RenderResult = {
   height: number;
   durationInFrames: number;
   out: string;
+  /** Warnings collected from `[svelte-motion]` console messages, deduped, capped at 50. */
+  warnings: string[];
+  /** Time in ms spent waiting for readiness (probe + first frame). */
+  readyMs: number;
 };
 
 /** The `apt`/`brew` hint is the difference between a bug report and a fix. */
@@ -128,20 +135,24 @@ const pageNeverBooted = (buildDir: string, url: string, cause?: unknown): Error 
     cause === undefined ? undefined : { cause },
   );
 
+const invalidCompositionProps = (compositionId: string, message: string): Error =>
+  new Error(`Composition "${compositionId}" props are invalid: ${message}`);
+
 /**
  * Reads the registry and returns the config for `compositionId`.
  *
  * Navigates without waiting for readiness, checks the registry immediately so a
  * typo fails in milliseconds rather than after the 30 s ready timeout, then
- * waits for readiness only when the id is known. The error-page path (unknown
- * id still publishes the registry) is the reason the registry is consulted
- * before the ready wait.
+ * validates props and waits for readiness only when the id is known. The error-page
+ * path (unknown id still publishes the registry) is the reason the registry is
+ * consulted before the ready wait.
  */
 const resolveComposition = async (
   browser: Browser,
   url: string,
   options: RenderOptions,
 ): Promise<PageComposition> => {
+  const readyTimeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
   const context = await browser.newContext({
     viewport: PROBE_VIEWPORT,
     deviceScaleFactor: 1,
@@ -168,9 +179,22 @@ const resolveComposition = async (
       throw unknownComposition(options.compositionId, options.buildDir, available);
     }
 
+    // Props validation — must happen before the ready wait so a schema error
+    // fails fast and does not look like a readiness timeout.
+    const validationError = await page.evaluate(() => {
+      const bridge = window as unknown as {
+        svelteMotion_validationError?: unknown;
+      };
+      return bridge.svelteMotion_validationError;
+    });
+
+    if (typeof validationError === "string" && validationError.length > 0) {
+      throw invalidCompositionProps(options.compositionId, validationError);
+    }
+
     // Id is known — now pay the ready wait. A failure here is a real readiness
     // problem, not a typo, so it surfaces as-is.
-    await waitForReadyAndFonts(page, options.compositionId);
+    await waitForReadyAndFonts(page, options.compositionId, readyTimeoutMs);
 
     return config;
   } finally {
@@ -192,13 +216,47 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
   }
 
   const concurrency = normalizeConcurrency(options.concurrency);
+  const readyTimeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
   const server = await serveBuild(options.buildDir, options.port ?? 0);
+
+  // Warnings collected from every page; deduped and capped at 50.
+  const warnings: string[] = [];
+  const warningsSet = new Set<string>();
+  let pageError: Error | undefined;
+
+  const attachDiagnostics = (page: import("playwright").Page, compositionId: string): void => {
+    page.on("console", (msg) => {
+      const text = msg.text();
+      if (text.startsWith("[svelte-motion]")) {
+        if (!warningsSet.has(text) && warnings.length < 50) {
+          warningsSet.add(text);
+          warnings.push(text);
+        }
+      }
+    });
+    page.on("pageerror", (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      pageError = new Error(`Composition "${compositionId}" page error: ${message}`, {
+        cause: error,
+      });
+    });
+  };
+
+  const checkPageError = (): void => {
+    if (pageError !== undefined) {
+      throw pageError;
+    }
+  };
+
+  const readyStart = performance.now();
 
   try {
     const browser = await launchBrowser();
 
     try {
       const config = await resolveComposition(browser, server.url, options);
+      checkPageError();
+      const readyMsProbe = Math.round(performance.now() - readyStart);
       const total = config.durationInFrames;
       const size = { width: config.width, height: config.height };
 
@@ -213,10 +271,13 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
 
           try {
             const page = await context.newPage();
-            await openComposition(page, server.url, config.id, options.props);
+            attachDiagnostics(page, config.id);
+            await openComposition(page, server.url, config.id, options.props, readyTimeoutMs);
+            checkPageError();
 
             for (let frame = chunk.start; frame < chunk.end; frame += 1) {
-              captures.set(frame, await captureFrame(page, frame, size));
+              captures.set(frame, await captureFrame(page, frame, size, readyTimeoutMs, config.id));
+              checkPageError();
               done += 1;
               options.onProgress?.(done, total);
             }
@@ -225,6 +286,8 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
           }
         }),
       );
+
+      checkPageError();
 
       // Rebuilt in ascending order — this is the video.
       const frames = Array.from({ length: total }, (_, frame) => {
@@ -252,6 +315,8 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
         height: config.height,
         durationInFrames: config.durationInFrames,
         out: options.out,
+        warnings: [...warnings],
+        readyMs: readyMsProbe,
       };
     } finally {
       await browser.close();

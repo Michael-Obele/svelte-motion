@@ -6,6 +6,7 @@
    * frame of exactly one composition, with no chrome around it, so a headless
    * browser can screenshot it. The M2 renderer drives this URL per frame.
    */
+  import * as v from "valibot";
   import {
     collectCompositions,
     getCompositions,
@@ -69,7 +70,42 @@
   };
 
   const frame = $derived(parseFrame(params.get("frame")));
-  const inputProps = $derived(parseProps(params.get("props"), composition));
+  const rawProps = $derived(params.get("props"));
+  const hasPropsParam = $derived(rawProps !== null && rawProps !== "");
+  const parsedProps = $derived(parseProps(rawProps, composition));
+
+  const formatIssues = (
+    issues: readonly { path?: readonly { key: unknown }[]; message: string }[],
+  ): string =>
+    issues
+      .map((issue) => {
+        const path = issue.path?.map((item) => String(item.key)).join(".");
+        return `${path === undefined || path === "" ? "(root)" : path}: ${issue.message}`;
+      })
+      .join("; ");
+
+  const validationError = $derived.by(() => {
+    if (composition === undefined) return undefined;
+    if (composition.schema === undefined) return undefined;
+    if (!hasPropsParam) return undefined;
+    const result = v.safeParse(composition.schema, parsedProps);
+    if (result.success) return undefined;
+    return formatIssues(result.issues);
+  });
+
+  const inputProps = $derived(
+    validationError === undefined ? parsedProps : (composition?.defaultProps ?? {}),
+  );
+
+  // Expose validation error for the renderer to read before the ready wait.
+  $effect(() => {
+    const bridge = window as unknown as Record<string, unknown>;
+    if (validationError !== undefined) {
+      bridge.svelteMotion_validationError = validationError;
+    } else {
+      bridge.svelteMotion_validationError = undefined;
+    }
+  });
 
   // Renderer-facing globals. `svelteMotion_getCompositions` lets a driver list what
   // it can render; `svelteMotion_inputProps` echoes the props actually in use, so a
@@ -82,11 +118,18 @@
     return () => {
       delete bridge.svelteMotion_getCompositions;
       delete bridge.svelteMotion_inputProps;
+      delete bridge.svelteMotion_validationError;
     };
   });
 </script>
 
-{#if composition}
+{#if validationError !== undefined}
+  <main class="error">
+    <h1>Invalid props</h1>
+    <p>Composition <code>{compositionId}</code> props failed validation:</p>
+    <p><code>{validationError}</code></p>
+  </main>
+{:else if composition}
   {@const Component = composition.component}
   <MotionRoot
     fps={composition.fps}

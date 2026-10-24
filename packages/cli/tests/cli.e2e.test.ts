@@ -272,4 +272,42 @@ describe("CLI e2e", () => {
     },
     TIMEOUT_MS,
   );
+
+  e2e(
+    "render fixture-font-heavy with invalid props exits 1 and names validation issue",
+    async () => {
+      const dir = await makeTempDir();
+      const out = join(dir, "out.mp4");
+
+      try {
+        const result = await spawnCli([
+          "render",
+          "fixture-font-heavy",
+          "--out",
+          out,
+          "--build",
+          BUILD_DIR,
+          "--props",
+          '{"title":""}',
+        ]);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toMatch(/title/i);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "list includes fixture ids",
+    async () => {
+      const result = await spawnCli(["list", "--build", BUILD_DIR]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/fixture-font-heavy/);
+      expect(result.stdout).toMatch(/fixture-missing-asset/);
+      expect(result.stdout).toMatch(/fixture-stuck/);
+    },
+    TIMEOUT_MS,
+  );
 });

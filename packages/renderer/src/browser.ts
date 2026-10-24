@@ -38,8 +38,11 @@ export type FrameSize = { width: number; height: number };
  *
  * A composition that `delayRender`s on remote fonts can legitimately take a while
  * on a cold cache, but a hung frame must fail the render instead of stalling it.
+ *
+ * Exported as the default for `RenderOptions.readyTimeoutMs`; every ready wait
+ * receives the timeout explicitly so no function reads a module-level constant.
  */
-const READY_TIMEOUT_MS = 30_000;
+export const DEFAULT_READY_TIMEOUT_MS = 30_000;
 
 /** The `svelteMotion_*` surface, as seen from inside the page. */
 type PageBridge = {
@@ -77,12 +80,44 @@ export const launchBrowser = (): Promise<Browser> =>
   });
 
 /** Rejects when the page never reports ready, so a blank frame cannot be encoded. */
-const waitForReady = async (page: Page): Promise<void> => {
-  await page.waitForFunction(
-    () => (window as unknown as PageBridge).svelteMotion_ready?.() === true,
-    undefined,
-    { timeout: READY_TIMEOUT_MS },
-  );
+export const waitForReady = async (
+  page: Page,
+  timeoutMs: number,
+  compositionId?: string,
+  frame?: number,
+): Promise<void> => {
+  try {
+    await page.waitForFunction(
+      () => (window as unknown as PageBridge).svelteMotion_ready?.() === true,
+      undefined,
+      { timeout: timeoutMs },
+    );
+  } catch (error) {
+    let pending: string[] = [];
+    try {
+      pending = await page.evaluate(() => {
+        const bridge = window as unknown as {
+          svelteMotion_pendingHandles?: () => string[];
+        };
+        try {
+          return bridge.svelteMotion_pendingHandles?.() ?? [];
+        } catch {
+          return [];
+        }
+      });
+    } catch {
+      pending = [];
+    }
+    const pendingText =
+      pending.length > 0 ? ` pending handles: ${pending.join(", ")}` : " pending handles: (none)";
+    const label = compositionId ?? "unknown";
+    const frameText = frame !== undefined ? ` at frame ${frame}` : " at frame 0";
+    throw new Error(
+      `Composition "${label}" never reported ready within ${timeoutMs}ms${frameText} — ` +
+        `a delayRender() handle is probably still open, or the page failed to load.${pendingText}`,
+      { cause: error },
+    );
+  }
 };
 
 /** Waits for web fonts, which change text metrics and therefore pixels. */
@@ -141,19 +176,12 @@ export const gotoComposition = async (
  * Must be called after `gotoComposition` (or `openComposition`). Separated so
  * callers can check the composition registry before blocking on readiness.
  */
-export const waitForReadyAndFonts = async (page: Page, compositionId?: string): Promise<void> => {
-  try {
-    await waitForReady(page);
-  } catch (error) {
-    const label = compositionId ?? "unknown";
-
-    throw new Error(
-      `Composition "${label}" never reported ready within ${READY_TIMEOUT_MS}ms at frame 0 — ` +
-        "a delayRender() handle is probably still open, or the page failed to load",
-      { cause: error },
-    );
-  }
-
+export const waitForReadyAndFonts = async (
+  page: Page,
+  compositionId: string,
+  timeoutMs: number,
+): Promise<void> => {
+  await waitForReady(page, timeoutMs, compositionId, 0);
   await waitForFonts(page);
 };
 
@@ -169,10 +197,11 @@ export const openComposition = async (
   page: Page,
   url: string,
   compositionId: string,
-  props?: Record<string, unknown>,
+  props: Record<string, unknown> | undefined,
+  timeoutMs: number,
 ): Promise<void> => {
   await gotoComposition(page, url, compositionId, props);
-  await waitForReadyAndFonts(page, compositionId);
+  await waitForReadyAndFonts(page, compositionId, timeoutMs);
 };
 
 /**
@@ -219,6 +248,8 @@ export const captureFrame = async (
   page: Page,
   frame: number,
   size: FrameSize,
+  timeoutMs: number,
+  compositionId?: string,
 ): Promise<Uint8Array> => {
   // The await is the whole point: it resolves after the flush and the paint, so
   // the screenshot below cannot race the previous frame. No `?.()` on the bridge:
@@ -239,17 +270,7 @@ export const captureFrame = async (
 
   // A frame can open new handles (an image that only appears at frame 40), so
   // readiness is re-checked after every seek, not just once at load.
-  try {
-    await waitForReady(page);
-  } catch (error) {
-    // TODO(task-5): name the pending handles here. The page reports readiness as
-    // a boolean today; `getPendingLabels()` does not cross the bridge yet, and an
-    // error that says *which* asset stalled beats one that says "timed out".
-    throw new Error(
-      `Frame ${frame} never reported ready within ${READY_TIMEOUT_MS}ms — a delayRender() handle opened on this frame is still open`,
-      { cause: error },
-    );
-  }
+  await waitForReady(page, timeoutMs, compositionId, frame);
 
   await waitForFonts(page);
 

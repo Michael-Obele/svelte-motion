@@ -16,7 +16,8 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
   },
   "dependencies": {
-    "@svelte-motion/core": "workspace:*"
+    "@svelte-motion/core": "workspace:*",
+    "valibot": "^1.5.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^4.0.0",
