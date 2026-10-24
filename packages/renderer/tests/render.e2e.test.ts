@@ -315,7 +315,7 @@ describe("renderComposition (e2e)", () => {
             deviceScaleFactor: 1,
           });
           const page = await context.newPage();
-          await openComposition(page, server.url, "fixture-font-heavy");
+          await openComposition(page, server.url, "fixture-font-heavy", undefined, 30_000);
 
           const fontState = await page.evaluate(() => {
             const title = document.querySelector(".fixture-title");

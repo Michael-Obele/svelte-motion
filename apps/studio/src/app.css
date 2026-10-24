@@ -1,9 +1,14 @@
+@import "tailwindcss";
+
 /*
  * Screenshot fidelity.
  *
  * The studio is a render host: whatever the browser draws around the composition
  * ends up in the captured PNG. So the page has no chrome — no body margin, no
  * scrollbars, no background bleed.
+ *
+ * This rule is deliberately unlayered, so it wins over Tailwind's preflight on
+ * the /render and /player pixel surfaces.
  */
 html,
 body {
@@ -11,4 +16,29 @@ body {
   padding: 0;
   overflow: hidden;
   background: #000;
+}
+
+@theme {
+  --color-studio: #0b1020;
+  --color-panel: #111827;
+  --color-ink: #e2e8f0;
+  --color-muted: #94a3b8;
+  --color-accent: #38bdf8;
+  --color-line: #1f2937;
+}
+
+@layer base {
+  /*
+   * Pixel-gate restore. Preflight sets `html { line-height: 1.5 }`; the render
+   * and player hosts drew under the UA default (`normal`). Compositions inherit
+   * line-height into their title nodes, so without this the hello-world title
+   * box grows and the captured frame PNGs shift. This sits after the import, in
+   * the same layer as preflight, so it wins on source order at equal
+   * specificity. Everything else in preflight (margins, font-size resets) is
+   * already neutralised on the pixel surfaces by scoped/inline composition
+   * styles, so it stays.
+   */
+  html {
+    line-height: normal;
+  }
 }

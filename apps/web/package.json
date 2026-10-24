@@ -16,7 +16,9 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
   },
   "dependencies": {
-    "@svelte-motion/core": "workspace:*"
+    "@svelte-motion/core": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^8.0.0",

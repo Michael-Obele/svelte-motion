@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #0b1020;
+  color: #e2e8f0;
+}
+
+@theme {
+  --color-studio: #0b1020;
+  --color-panel: #111827;
+  --color-ink: #e2e8f0;
+  --color-muted: #94a3b8;
+  --color-accent: #38bdf8;
+  --color-line: #1f2937;
+}
