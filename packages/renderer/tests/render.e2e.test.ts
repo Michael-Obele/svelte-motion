@@ -201,6 +201,7 @@ describe("renderComposition (e2e)", () => {
       const dir = await makeTempDir();
 
       try {
+        const start = performance.now();
         const error = await renderComposition({
           buildDir: BUILD_DIR,
           compositionId: "definitely-not-registered",
@@ -209,6 +210,7 @@ describe("renderComposition (e2e)", () => {
           () => undefined,
           (thrown: unknown) => thrown,
         );
+        const elapsed = performance.now() - start;
 
         expect(error).toBeInstanceOf(Error);
 
@@ -218,6 +220,8 @@ describe("renderComposition (e2e)", () => {
         // different bug, so neither matcher alone is enough.
         expect(message).toMatch(/not registered/);
         expect(message).toMatch(/hello-world/);
+        // Unknown id must fail instantly, not after the 30 s ready timeout
+        expect(elapsed).toBeLessThan(5000);
       } finally {
         await rm(dir, { recursive: true, force: true });
       }

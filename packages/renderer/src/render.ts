@@ -23,9 +23,11 @@ import type { Browser } from "playwright";
 import {
   captureFrame,
   getCompositionsFromPage,
+  gotoComposition,
   hasCompositionBridge,
   launchBrowser,
   openComposition,
+  waitForReadyAndFonts,
   type PageComposition,
 } from "./browser.ts";
 import { chunkRange } from "./chunks.ts";
@@ -129,11 +131,11 @@ const pageNeverBooted = (buildDir: string, url: string, cause?: unknown): Error 
 /**
  * Reads the registry and returns the config for `compositionId`.
  *
- * The probe page is opened through the same `openComposition()` the frame loop
- * uses, so a composition that cannot even reach frame 0 fails here rather than
- * mid-render. If that fails, the composition list is read anyway: an unknown id
- * renders the host's error page, which still publishes the registry, so the
- * caller gets the available ids instead of a readiness timeout.
+ * Navigates without waiting for readiness, checks the registry immediately so a
+ * typo fails in milliseconds rather than after the 30 s ready timeout, then
+ * waits for readiness only when the id is known. The error-page path (unknown
+ * id still publishes the registry) is the reason the registry is consulted
+ * before the ready wait.
  */
 const resolveComposition = async (
   browser: Browser,
@@ -150,34 +152,25 @@ const resolveComposition = async (
     const find = (compositions: readonly PageComposition[]): PageComposition | undefined =>
       compositions.find((composition) => composition.id === options.compositionId);
 
-    try {
-      await openComposition(page, url, options.compositionId, options.props);
-    } catch (error) {
-      const available = await getCompositionsFromPage(page);
+    // Navigate without blocking on readiness — a typo should not cost 30 s.
+    await gotoComposition(page, url, options.compositionId, options.props);
 
-      // Empty *and* bridge-less means the host never ran: the id is irrelevant.
-      // Empty with a bridge present means the studio genuinely registered nothing,
-      // which the listing error below reports accurately.
-      if (available.length === 0 && !(await hasCompositionBridge(page))) {
-        throw pageNeverBooted(options.buildDir, url, error);
-      }
+    // Check the registry before waiting: unknown ids fail instantly.
+    const available = await getCompositionsFromPage(page);
 
-      const listed = find(available);
-
-      if (listed === undefined) {
-        throw unknownComposition(options.compositionId, options.buildDir, available, error);
-      }
-
-      // The id exists, so the failure is a real readiness problem: keep it.
-      throw error;
+    if (available.length === 0 && !(await hasCompositionBridge(page))) {
+      throw pageNeverBooted(options.buildDir, url);
     }
 
-    const available = await getCompositionsFromPage(page);
     const config = find(available);
 
     if (config === undefined) {
       throw unknownComposition(options.compositionId, options.buildDir, available);
     }
+
+    // Id is known — now pay the ready wait. A failure here is a real readiness
+    // problem, not a typo, so it surfaces as-is.
+    await waitForReadyAndFonts(page, options.compositionId);
 
     return config;
   } finally {

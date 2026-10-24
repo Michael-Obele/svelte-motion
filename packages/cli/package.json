@@ -13,6 +13,9 @@
     "url": "git+https://github.com/Michael-Obele/svelte-motion.git",
     "directory": "packages/cli"
   },
+  "bin": {
+    "cli": "./dist/index.mjs"
+  },
   "files": [
     "dist"
   ],
@@ -28,6 +31,7 @@
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
+    "test:e2e": "SM_E2E=1 vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build"
   },
@@ -35,6 +39,7 @@
     "@svelte-motion/renderer": "workspace:*"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.4",
     "@types/node": "^26.6.5",
     "bumpp": "^12.3.0",
     "typescript": "^6.0.3",

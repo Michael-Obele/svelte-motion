@@ -12,9 +12,11 @@ export {
   captureFrame,
   CHROMIUM_DETERMINISM_FLAGS,
   getCompositionsFromPage,
+  gotoComposition,
   hasCompositionBridge,
   launchBrowser,
   openComposition,
+  waitForReadyAndFonts,
   type FrameSize,
   type PageComposition,
 } from "./browser.ts";

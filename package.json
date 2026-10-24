@@ -15,6 +15,7 @@
     "spike": "vp run studio#build && bun run tools/spike/determinism.ts",
     "render-demo": "bun run tools/spike/render-demo.ts",
     "test:e2e": "vp run renderer#test:e2e",
+    "test:e2e:cli": "vp run cli#test:e2e",
     "verify": "vp run studio#build && bun run tools/spike/verify-determinism.ts"
   },
   "devDependencies": {

@@ -93,14 +93,30 @@ const waitForFonts = async (page: Page): Promise<void> => {
 };
 
 /**
- * Opens one composition at frame 0.
+ * How long to wait for the composition-registry bridge to appear after navigation.
  *
- * @param page - Page to drive (the caller decides its viewport size)
- * @param url - Origin from `serveBuild()`
- * @param compositionId - Registry id, e.g. `hello-world`
- * @param props - Composition props; omitted from the URL when `undefined`
+ * The bridge is installed in `onMount` after SvelteKit hydrates, which is fast
+ * (hundreds of ms) but not instant after `load`. Waiting for it here lets
+ * callers inspect the registry without paying the 30 s ready timeout.
  */
-export const openComposition = async (
+const BRIDGE_TIMEOUT_MS = 5_000;
+
+const waitForBridge = async (page: Page): Promise<void> => {
+  await page.waitForFunction(
+    () => typeof (window as unknown as PageBridge).svelteMotion_getCompositions === "function",
+    { timeout: BRIDGE_TIMEOUT_MS },
+  );
+};
+
+/**
+ * Navigates to one composition at frame 0 without waiting for readiness.
+ *
+ * Separated from the ready wait so callers can inspect the registry before
+ * paying the 30 s timeout — a typo in the id should fail instantly. Waits for
+ * the composition-registry bridge (installed in `onMount` after hydration) so
+ * `getCompositionsFromPage` can be called immediately after.
+ */
+export const gotoComposition = async (
   page: Page,
   url: string,
   compositionId: string,
@@ -116,18 +132,47 @@ export const openComposition = async (
   }
 
   await page.goto(target, { waitUntil: "load" });
+  await waitForBridge(page);
+};
 
+/**
+ * Waits for the page to report ready and for web fonts to settle.
+ *
+ * Must be called after `gotoComposition` (or `openComposition`). Separated so
+ * callers can check the composition registry before blocking on readiness.
+ */
+export const waitForReadyAndFonts = async (page: Page, compositionId?: string): Promise<void> => {
   try {
     await waitForReady(page);
   } catch (error) {
+    const label = compositionId ?? "unknown";
+
     throw new Error(
-      `Composition "${compositionId}" never reported ready within ${READY_TIMEOUT_MS}ms at frame 0 — ` +
+      `Composition "${label}" never reported ready within ${READY_TIMEOUT_MS}ms at frame 0 — ` +
         "a delayRender() handle is probably still open, or the page failed to load",
       { cause: error },
     );
   }
 
   await waitForFonts(page);
+};
+
+/**
+ * Opens one composition at frame 0.
+ *
+ * @param page - Page to drive (the caller decides its viewport size)
+ * @param url - Origin from `serveBuild()`
+ * @param compositionId - Registry id, e.g. `hello-world`
+ * @param props - Composition props; omitted from the URL when `undefined`
+ */
+export const openComposition = async (
+  page: Page,
+  url: string,
+  compositionId: string,
+  props?: Record<string, unknown>,
+): Promise<void> => {
+  await gotoComposition(page, url, compositionId, props);
+  await waitForReadyAndFonts(page, compositionId);
 };
 
 /**
