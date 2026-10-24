@@ -19,10 +19,10 @@
   // that contains it, so a glob living inside `@svelte-motion/core` would only ever
   // see core's own files.
   const compositions = collectCompositions(
-    import.meta.glob("/src/compositions/*/index.ts", { eager: true }) as Record<
-      string,
-      { default?: unknown }
-    >,
+    import.meta.glob(
+      ["/src/compositions/*/index.ts", "../../../../../examples/*/index.ts"],
+      { eager: true },
+    ) as Record<string, { default?: unknown }>,
   );
 
   // Set before anything mounts — the same handshake the renderer performs. It has

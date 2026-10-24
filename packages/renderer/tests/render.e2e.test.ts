@@ -542,4 +542,48 @@ describe("renderComposition (e2e)", () => {
     },
     TIMEOUT_MS,
   );
+
+  // The examples are the showcase: if one of them stops rendering, the repo is
+  // selling something it cannot do. Each is rendered for real, at full length.
+  const examples = [
+    { id: "title-card", frames: 90 },
+    { id: "lower-third", frames: 120 },
+    { id: "image-gallery", frames: 120 },
+    { id: "data-chart", frames: 150 },
+  ] as const;
+
+  for (const example of examples) {
+    e2e(
+      `example "${example.id}" renders ${example.frames} frames with no warnings`,
+      async () => {
+        await requireStudioBuild();
+
+        const dir = await makeTempDir();
+        const out = join(dir, `${example.id}.mp4`);
+
+        try {
+          const result = await renderComposition({
+            buildDir: BUILD_DIR,
+            compositionId: example.id,
+            out,
+          });
+
+          expect(result.frameCount).toBe(example.frames);
+          expect(result.width).toBe(1920);
+          expect(result.height).toBe(1080);
+          expect(result.fps).toBe(30);
+          // A missing asset or a failing fetch would land here, not in a throw.
+          expect(result.warnings).toEqual([]);
+
+          const file = Bun.file(out);
+          expect(await file.exists()).toBe(true);
+          // `stat()` is not part of the Node shim, so read the bytes instead.
+          expect((await readFile(out)).length).toBeGreaterThan(1_000);
+        } finally {
+          await rm(dir, { recursive: true, force: true });
+        }
+      },
+      TIMEOUT_MS,
+    );
+  }
 });

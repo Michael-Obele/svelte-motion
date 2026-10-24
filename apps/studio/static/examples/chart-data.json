@@ -1,0 +1,10 @@
+{
+  "heading": "Monthly renders",
+  "rows": [
+    { "label": "January", "value": 42 },
+    { "label": "February", "value": 68 },
+    { "label": "March", "value": 51 },
+    { "label": "April", "value": 94 },
+    { "label": "May", "value": 77 }
+  ]
+}

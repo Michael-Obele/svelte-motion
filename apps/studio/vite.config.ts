@@ -1,10 +1,25 @@
 import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import adapter from "@sveltejs/adapter-static";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 import { lazyPlugins } from "vite-plus";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // The `examples/` folder lives outside this app's root, so bun never links
+      // `@svelte-motion/core` into a `node_modules` the resolver can see from
+      // there. Point it at core's source: the studio then always reflects the
+      // library it ships with, and there is no stale `dist` to forget to rebuild.
+      "@svelte-motion/core": fileURLToPath(
+        new URL("../../packages/core/src/lib/index.ts", import.meta.url),
+      ),
+      // Same reason: `examples/data-chart` imports valibot for its props schema.
+      // `import.meta.resolve` picks the ESM entry, not the CJS one.
+      valibot: fileURLToPath(import.meta.resolve("valibot")),
+    },
+  },
   plugins: lazyPlugins(() => [
     tailwindcss(),
     sveltekit({

@@ -48,7 +48,7 @@ packages/renderer/   # @svelte-motion/renderer  node-only: browser.ts, ffmpeg.ts
 packages/cli/        # @svelte-motion/cli       bin; standalone executable later via pack.exe
 apps/studio/         # SvelteKit dev server: Timeline, Scrubber, Preview
 apps/web/            # homepage + docs (SvelteKit + shadcn-svelte)
-examples/            # compositions consumed by studio, docs, and renderer tests (not yet created)
+examples/            # compositions consumed by studio, docs, and renderer tests
 ```
 
 The split is a hard boundary, not tidiness: the renderer shells out to Playwright and FFmpeg, so

@@ -132,6 +132,22 @@ bun packages/cli/src/index.ts render hello-world --out out/video.mp4 --build app
 
 Full API references live in the package READMEs: [core](packages/core/README.md), [renderer](packages/renderer/README.md), [cli](packages/cli/README.md), [studio](apps/studio/README.md).
 
+## Examples
+
+Four runnable compositions live in [`examples/`](examples/README.md):
+
+- `title-card`: spring entrance, a rule that draws, staged timing with `Sequence`
+- `lower-third`: a graphic sliding in and out inside one `Sequence`
+- `image-gallery`: three images cross-fading with `prefetch` and a slow scale
+- `data-chart`: bars from a JSON file fetched under `delayRender`, with a valibot schema
+
+Run `vp run studio#dev` and pick one, or render it:
+
+```bash
+vp run studio#build
+bun packages/cli/src/index.ts render title-card --out out/title-card.mp4 --build apps/studio/build
+```
+
 ## How it works
 
 1. Vite builds the Svelte app to static files.
