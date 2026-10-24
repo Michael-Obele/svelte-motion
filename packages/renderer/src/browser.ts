@@ -48,20 +48,32 @@ type PageBridge = {
   svelteMotion_getCompositions?: () => readonly unknown[];
 };
 
+/**
+ * Chromium flags that keep two runs of the same frame identical.
+ *
+ * Text is the one thing that can differ between two runs of the same frame: LCD
+ * subpixel antialiasing blends against a background the compositor decides on.
+ * The M0 gate produced byte-identical passes with these flags — that is a
+ * correlation, not a proof of causation, so read this list as "known to work"
+ * rather than "each one is necessary".
+ *
+ * Exported because the determinism spikes must launch the same browser the
+ * renderer does; a second, hand-copied list would drift from this one and the
+ * gate would then be measuring a browser nobody ships.
+ */
+export const CHROMIUM_DETERMINISM_FLAGS: readonly string[] = [
+  "--disable-lcd-text",
+  "--font-render-hinting=none",
+  "--force-color-profile=srgb",
+  "--disable-gpu",
+  "--hide-scrollbars",
+];
+
 /** Launches headless Chromium. The caller owns `close()`. */
 export const launchBrowser = (): Promise<Browser> =>
   chromium.launch({
     headless: true,
-    args: [
-      // Text is the one thing that can differ between two runs of the same frame:
-      // LCD subpixel antialiasing blends against a background the compositor
-      // decides on. The M0 gate proved these flags keep output byte-identical.
-      "--disable-lcd-text",
-      "--font-render-hinting=none",
-      "--force-color-profile=srgb",
-      "--disable-gpu",
-      "--hide-scrollbars",
-    ],
+    args: [...CHROMIUM_DETERMINISM_FLAGS],
   });
 
 /** Rejects when the page never reports ready, so a blank frame cannot be encoded. */
@@ -118,6 +130,18 @@ export const openComposition = async (
   await waitForFonts(page);
 };
 
+/**
+ * True when the page published the composition-registry bridge at all.
+ *
+ * An empty registry and an un-booted page both look like `[]`, but they are
+ * different failures: one is a studio that registered nothing, the other is a
+ * bundle that never ran. Only the page can tell them apart.
+ */
+export const hasCompositionBridge = async (page: Page): Promise<boolean> =>
+  await page.evaluate(
+    () => typeof (window as unknown as PageBridge).svelteMotion_getCompositions === "function",
+  );
+
 /** Reads the registry the page publishes, projected to what the renderer needs. */
 export const getCompositionsFromPage = async (page: Page): Promise<PageComposition[]> => {
   return await page.evaluate((): PageComposition[] => {
@@ -152,9 +176,20 @@ export const captureFrame = async (
   size: FrameSize,
 ): Promise<Uint8Array> => {
   // The await is the whole point: it resolves after the flush and the paint, so
-  // the screenshot below cannot race the previous frame.
+  // the screenshot below cannot race the previous frame. No `?.()` on the bridge:
+  // a missing `setFrame` would make the seek a silent no-op and every frame after
+  // the first would be a screenshot of frame 0.
   await page.evaluate(async (target: number) => {
-    await (window as unknown as PageBridge).svelteMotion_setFrame?.(target);
+    const bridge = window as unknown as PageBridge;
+
+    if (typeof bridge.svelteMotion_setFrame !== "function") {
+      throw new Error(
+        `frame ${target}: window.svelteMotion_setFrame is not a function — ` +
+          "the composition host never installed its bridge",
+      );
+    }
+
+    await bridge.svelteMotion_setFrame(target);
   }, frame);
 
   // A frame can open new handles (an image that only appears at frame 40), so

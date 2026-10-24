@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "determinism": "bun run determinism.ts",
+    "verify": "bun run verify-determinism.ts",
     "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@svelte-motion/renderer": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

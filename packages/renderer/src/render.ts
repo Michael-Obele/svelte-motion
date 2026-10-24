@@ -23,6 +23,7 @@ import type { Browser } from "playwright";
 import {
   captureFrame,
   getCompositionsFromPage,
+  hasCompositionBridge,
   launchBrowser,
   openComposition,
   type PageComposition,
@@ -112,6 +113,20 @@ const unknownComposition = (
   );
 
 /**
+ * The page published no registry at all, which is a different bug from a typo in
+ * the id: the bundle never booted. Reporting this as "not registered" would send
+ * the caller to the composition registry instead of to the build.
+ */
+const pageNeverBooted = (buildDir: string, url: string, cause?: unknown): Error =>
+  new Error(
+    `The render page at ${url} never published a composition registry ` +
+      "(window.svelteMotion_getCompositions is undefined), so it never booted. " +
+      `Check that ${buildDir} holds the studio's render host and that its bundle ` +
+      "did not throw during load — a composition id cannot be the problem here",
+    cause === undefined ? undefined : { cause },
+  );
+
+/**
  * Reads the registry and returns the config for `compositionId`.
  *
  * The probe page is opened through the same `openComposition()` the frame loop
@@ -139,6 +154,14 @@ const resolveComposition = async (
       await openComposition(page, url, options.compositionId, options.props);
     } catch (error) {
       const available = await getCompositionsFromPage(page);
+
+      // Empty *and* bridge-less means the host never ran: the id is irrelevant.
+      // Empty with a bridge present means the studio genuinely registered nothing,
+      // which the listing error below reports accurately.
+      if (available.length === 0 && !(await hasCompositionBridge(page))) {
+        throw pageNeverBooted(options.buildDir, url, error);
+      }
+
       const listed = find(available);
 
       if (listed === undefined) {

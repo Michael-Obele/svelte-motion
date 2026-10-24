@@ -19,6 +19,7 @@
  */
 
 import { join } from "node:path";
+import { CHROMIUM_DETERMINISM_FLAGS } from "@svelte-motion/renderer";
 import { chromium, type Page } from "playwright";
 
 const PORT = 4173;
@@ -190,15 +191,9 @@ const main = async (): Promise<number> => {
 
     const browser = await chromium.launch({
       headless: true,
-      args: [
-        // Text rendering is the one thing that can differ between two runs on the
-        // same machine (LCD subpixel AA is blended per-frame by the compositor).
-        "--disable-lcd-text",
-        "--font-render-hinting=none",
-        "--force-color-profile=srgb",
-        "--disable-gpu",
-        "--hide-scrollbars",
-      ],
+      // The renderer's own list, not a copy: two lists drift, and then this gate
+      // measures a browser nobody renders with.
+      args: [...CHROMIUM_DETERMINISM_FLAGS],
     });
 
     try {

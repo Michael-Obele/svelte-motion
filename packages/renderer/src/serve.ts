@@ -18,9 +18,12 @@
 
 import { normalize, resolve, sep } from "node:path";
 
+/** The only interface this server listens on. */
+const LOOPBACK = "127.0.0.1";
+
 /** A running build server. `stop()` never throws; it is safe in `finally`. */
 export type BuildServer = {
-  /** Origin the server answers on, e.g. `http://localhost:4173`. */
+  /** Origin the server answers on, e.g. `http://127.0.0.1:4173`. */
   url: string;
   /** Port actually bound — differs from the requested one when it was `0`. */
   port: number;
@@ -92,8 +95,18 @@ export const serveBuild = async (buildDir: string, port = 4173): Promise<BuildSe
   const root = resolve(buildDir);
   const indexFile = Bun.file(resolve(root, "index.html"));
 
+  // Checked before binding. Without this the server starts happily, answers every
+  // request with a 404 (or with nothing), and the failure surfaces later inside
+  // the browser as "never reported ready" — a delayRender() bug that is not there.
+  if (!(await indexFile.exists())) {
+    throw new Error(`no studio build at ${root} — run \`vp run studio#build\` first`);
+  }
+
   const server = Bun.serve({
     port,
+    // Loopback only: this is a local render tool, and it serves a directory — it
+    // has no business answering on the machine's other interfaces.
+    hostname: LOOPBACK,
     fetch: async (request: Request): Promise<Response> => {
       const { pathname } = new URL(request.url);
       const candidate = pathname.endsWith("/") ? null : resolveRequestPath(root, pathname);
@@ -120,8 +133,16 @@ export const serveBuild = async (buildDir: string, port = 4173): Promise<BuildSe
 
   // `port` is optional on Bun's `Server`; it is set as soon as the server binds.
   const boundPort = server.port ?? port;
-  const url = `http://localhost:${boundPort}`;
-  await waitUntilAnswering(url);
+  const url = `http://${LOOPBACK}:${boundPort}`;
+
+  try {
+    await waitUntilAnswering(url);
+  } catch (error) {
+    // The caller never receives the handle, so this server would keep the port
+    // for the life of the process. Closing it here is the only chance.
+    void server.stop(true);
+    throw error;
+  }
 
   return {
     url,

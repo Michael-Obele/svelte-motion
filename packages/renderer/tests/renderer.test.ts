@@ -1,11 +1,11 @@
 /**
  * Renderer unit tests — no browser, no build directory, no MP4.
  *
- * The modules are Bun-native by decision (`Bun.serve`, `Bun.spawn`), but this
- * suite runs under Node: `vp test` starts Vitest on Node 24, where `Bun` does not
- * exist. Rather than fork the encoder into a Node path that would never ship, the
- * suite installs a minimal `Bun.spawn` shim backed by `node:child_process` when —
- * and only when — the real global is missing.
+ * The modules are Bun-native by decision (`Bun.serve`, `Bun.spawn`, `Bun.file`),
+ * but this suite runs under Node: `vp test` starts Vitest on Node 24, where `Bun`
+ * does not exist. Rather than fork the shipped code into a Node path that would
+ * never ship, the suite installs the shared shim from `./bun-shim.ts` when — and
+ * only when — the real global is missing.
  *
  * The shim is a test harness, not production code: the shipped modules still
  * contain no `child_process` import, and under Bun these same tests hit
@@ -14,119 +14,12 @@
  * — against the real `ffmpeg` binary on this machine.
  */
 
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
 import { buildFfmpegArgs, checkFfmpeg, encodeWithFFmpeg } from "../src/index.ts";
-
-/* -------------------------------------------------------------------------- */
-/* Bun.spawn shim (test-only, Node runtime)                                    */
-/* -------------------------------------------------------------------------- */
-
-type ShimSpawnOptions = {
-  stdin?: "pipe" | "ignore";
-  stdout?: "ignore" | "inherit" | "pipe";
-  stderr?: "pipe" | "ignore";
-};
-
-type ShimProcess = {
-  stdin: {
-    write: (chunk: Uint8Array) => void;
-    flush: () => Promise<void>;
-    end: () => Promise<void>;
-  };
-  exited: Promise<number>;
-  stderr: ReadableStream<Uint8Array>;
-};
-
-/** Mirrors the sliver of `Bun.spawn` that `ffmpeg.ts` actually uses. */
-const spawnShim = (command: readonly string[], options: ShimSpawnOptions): ShimProcess => {
-  const [executable, ...args] = command;
-
-  if (executable === undefined) {
-    throw new Error("spawnShim() needs a command");
-  }
-
-  const child = spawn(executable, args, {
-    stdio: [
-      options.stdin === "ignore" ? "ignore" : "pipe",
-      options.stdout ?? "ignore",
-      options.stderr === "ignore" ? "ignore" : "pipe",
-    ],
-  });
-
-  const childStderr = child.stderr;
-  const stderr = new ReadableStream<Uint8Array>({
-    start: (controller) => {
-      if (childStderr === null) {
-        controller.close();
-
-        return;
-      }
-
-      childStderr.on("data", (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk));
-      });
-      childStderr.on("end", () => {
-        controller.close();
-      });
-      childStderr.on("error", (error: Error) => {
-        controller.error(error);
-      });
-    },
-  });
-
-  const exited = new Promise<number>((resolve, reject) => {
-    // Missing binary surfaces here, which is what `checkFfmpeg()` catches.
-    child.on("error", reject);
-    child.on("close", (code) => {
-      resolve(code ?? 1);
-    });
-  });
-
-  const childStdin = child.stdin;
-
-  return {
-    stdin: {
-      write: (chunk) => {
-        childStdin?.write(chunk);
-      },
-      flush: async () => {
-        if (childStdin === null || !childStdin.writableNeedDrain) {
-          return;
-        }
-
-        // Real backpressure: without this the frame loop would outrun FFmpeg and
-        // buffer the whole render in memory.
-        await once(childStdin, "drain");
-      },
-      end: async () => {
-        if (childStdin === null) {
-          return;
-        }
-
-        await new Promise<void>((resolve) => {
-          childStdin.end(resolve);
-        });
-      },
-    },
-    exited,
-    stderr,
-  };
-};
-
-const installBunShim = (): void => {
-  const target = globalThis as { Bun?: unknown };
-
-  if (target.Bun !== undefined) {
-    return;
-  }
-
-  target.Bun = { spawn: spawnShim };
-};
+import { installBunShim } from "./bun-shim.ts";
 
 beforeAll(() => {
   installBunShim();
@@ -181,9 +74,18 @@ describe("buildFfmpegArgs", () => {
   });
 
   test("carries the bitexact trio that makes two renders byte-identical", () => {
-    expect(indexOfSequence(args, ["-map_metadata", "-1"])).toBeGreaterThan(-1);
-    expect(indexOfSequence(args, ["-fflags", "+bitexact"])).toBeGreaterThan(-1);
-    expect(indexOfSequence(args, ["-flags:v", "+bitexact"])).toBeGreaterThan(-1);
+    const preset = args.indexOf("-preset");
+    const metadata = indexOfSequence(args, ["-map_metadata", "-1"]);
+    const fflags = indexOfSequence(args, ["-fflags", "+bitexact"]);
+    const flagsV = indexOfSequence(args, ["-flags:v", "+bitexact"]);
+
+    expect(preset).toBeGreaterThan(-1);
+    expect(metadata).toBeGreaterThan(preset);
+    expect(fflags).toBeGreaterThan(metadata);
+    expect(flagsV).toBeGreaterThan(fflags);
+    // The output path must stay last: an option after it is an output option for a
+    // second file, or is ignored outright.
+    expect(args.length - 1).toBeGreaterThan(flagsV);
   });
 
   test("defaults to h264, yuv420p, crf 18 and the medium preset", () => {

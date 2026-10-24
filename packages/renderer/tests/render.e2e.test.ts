@@ -16,14 +16,18 @@
  *   `creation_time`. If either regresses, the bytes diverge and this test says so.
  * - **unknown id names the available ids** — a typo in a composition id must not
  *   surface as "never reported ready".
+ * - **a `.js` asset answers with a JavaScript content type** — the shim's MIME
+ *   table and Bun's own must agree, because an ES module served as
+ *   `application/octet-stream` is refused by the browser and the render then
+ *   fails as a readiness timeout instead of as a server bug.
  */
 
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
-import { renderComposition } from "../src/index.ts";
+import { renderComposition, serveBuild } from "../src/index.ts";
 import { installBunShim } from "./bun-shim.ts";
 
 /* Three levels up from `packages/renderer/tests/` — the repo root. */
@@ -55,6 +59,18 @@ const requireStudioBuild = async (): Promise<void> => {
 
 const makeTempDir = async (): Promise<string> =>
   await mkdtemp(join(tmpdir(), "svelte-motion-e2e-"));
+
+/** Path of the first `.js` asset in the build, with POSIX separators for a URL. */
+const firstJsAsset = async (): Promise<string> => {
+  const entries = await readdir(BUILD_DIR, { recursive: true });
+  const [asset] = entries.filter((entry) => entry.endsWith(".js")).sort();
+
+  if (asset === undefined) {
+    throw new Error(`no .js asset under ${BUILD_DIR} — run \`vp run studio#build\` first`);
+  }
+
+  return asset.replaceAll("\\", "/");
+};
 
 const sha256 = (bytes: Uint8Array): string =>
   new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
@@ -185,15 +201,48 @@ describe("renderComposition (e2e)", () => {
       const dir = await makeTempDir();
 
       try {
-        await expect(
-          renderComposition({
-            buildDir: BUILD_DIR,
-            compositionId: "definitely-not-registered",
-            out: join(dir, "unknown.mp4"),
-          }),
-        ).rejects.toThrow(/hello-world/);
+        const error = await renderComposition({
+          buildDir: BUILD_DIR,
+          compositionId: "definitely-not-registered",
+          out: join(dir, "unknown.mp4"),
+        }).then(
+          () => undefined,
+          (thrown: unknown) => thrown,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+
+        const message = error instanceof Error ? error.message : "";
+        // Both halves are load-bearing: "not registered" is the diagnosis, the
+        // available-id list is the fix. A message with only one of them is a
+        // different bug, so neither matcher alone is enough.
+        expect(message).toMatch(/not registered/);
+        expect(message).toMatch(/hello-world/);
       } finally {
         await rm(dir, { recursive: true, force: true });
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "serves a .js chunk with a JavaScript content type",
+    async () => {
+      await requireStudioBuild();
+
+      const server = await serveBuild(BUILD_DIR, 0);
+
+      try {
+        const asset = await firstJsAsset();
+        const response = await fetch(`${server.url}/${asset}`);
+        const contentType = response.headers.get("content-type") ?? "";
+
+        expect({ asset, status: response.status }).toEqual({ asset, status: 200 });
+        // Bun's own MIME table and the test shim's must agree. An ES module
+        // served as `application/octet-stream` is refused by the browser.
+        expect(contentType).toMatch(/javascript/i);
+      } finally {
+        server.stop();
       }
     },
     TIMEOUT_MS,

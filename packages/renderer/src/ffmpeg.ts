@@ -127,6 +127,10 @@ export const encodeWithFFmpeg = async (
     await proc.stdin.end();
   } catch (error) {
     proc.kill();
+    // The stderr drain started above is still pending and the stream is about to
+    // die with the process. Settling it here keeps the write error below from
+    // being followed by an unhandled rejection nobody asked for.
+    void stderrText.catch(() => "");
     throw error;
   }
 

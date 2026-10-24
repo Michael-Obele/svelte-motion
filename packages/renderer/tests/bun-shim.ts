@@ -14,9 +14,10 @@
  * Two implementation notes worth keeping:
  *
  * - `Bun.serve` must expose the bound port *synchronously*, because `serveBuild()`
- *   reads `server.port` on the very next line. `node:http` binds a numeric port
- *   synchronously, so `listen(0)` followed by `address()` already answers — only
- *   the `listening` event is deferred.
+ *   reads `server.port` on the very next line. Real Bun can; `node:http` cannot
+ *   when it is told which host to bind, so the shim picks a loopback port itself
+ *   rather than asking the OS for one. `pickDynamicPort()` explains the whole
+ *   constraint — it is the least obvious code in this file.
  * - `Bun.file` returns a `Blob` with an `exists()` method. It has to be a real
  *   `Blob`, because `serve.ts` passes it straight to `new Response(file)` and the
  *   response derives its `Content-Type` from `blob.type`. That also means the MIME
@@ -29,7 +30,6 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 
 /* -------------------------------------------------------------------------- */
 /* Bun.file                                                                    */
@@ -87,12 +87,38 @@ const fileShim = (path: string): FileShim => {
 
 type ServeShimOptions = {
   port?: number;
+  /** Defaults to loopback, matching the `hostname` the real `serveBuild()` passes. */
+  hostname?: string;
   fetch: (request: Request) => Response | Promise<Response>;
 };
 
 type ServerShim = { port: number; stop: (force?: boolean) => void };
 
+/**
+ * Base for the ports the shim hands out when the caller asks for `0`.
+ *
+ * `node:http` only binds synchronously when it is given no host: a host goes
+ * through `dns.lookup`, which is asynchronous even for a literal IP, and the bind
+ * then happens on a later tick. `serveBuild()` reads `server.port` on the very
+ * next line — real Bun can answer because it binds synchronously — so the shim
+ * cannot wait for the `listening` event either. It therefore picks a concrete
+ * loopback port up front instead of asking the OS for `0`. The range is the OS's
+ * dynamic range, so no service port is squatted; the pid offset keeps two vitest
+ * workers from handing out the same numbers; `waitUntilAnswering()` in `serve.ts`
+ * already tolerates the few milliseconds the real bind takes.
+ */
+let nextDynamicPort = 49_152 + (process.pid % 1_000);
+
+const pickDynamicPort = (): number => {
+  nextDynamicPort = nextDynamicPort >= 61_000 ? 49_152 : nextDynamicPort + 1;
+
+  return nextDynamicPort;
+};
+
 const serveShim = (options: ServeShimOptions): ServerShim => {
+  const requested = options.port ?? 0;
+  const port = requested === 0 ? pickDynamicPort() : requested;
+
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://localhost");
@@ -109,17 +135,14 @@ const serveShim = (options: ServeShimOptions): ServerShim => {
     }
   });
 
-  server.listen(options.port ?? 0);
-
-  // Bound synchronously — `serveBuild()` reads `.port` before any await.
-  const boundPort = (server.address() as AddressInfo | null)?.port;
-
-  if (boundPort === undefined) {
-    throw new Error("serve shim: the listening socket never bound");
-  }
+  // Loopback by default: `node:http` binds every interface when no host is given,
+  // which is exactly what the real server was changed to avoid. The bind itself
+  // completes on a later tick — see `pickDynamicPort()` for why the port is known
+  // anyway.
+  server.listen(port, options.hostname ?? "127.0.0.1");
 
   return {
-    port: boundPort,
+    port,
     stop: () => {
       // `Bun`'s `stop(true)` drops keep-alive sockets; `close()` alone would keep
       // the port bound and the test process alive.

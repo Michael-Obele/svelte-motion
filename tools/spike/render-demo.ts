@@ -21,7 +21,15 @@ const OUT = join(REPO_ROOT, "out", "hello-world.mp4");
 /** Every tenth frame plus the last one: enough to show progress, not enough to spam. */
 const PROGRESS_STEP = 10;
 
+/** Fails with the command that fixes it, instead of inside the browser later. */
+const requireStudioBuild = async (): Promise<void> => {
+  if (!(await Bun.file(join(BUILD_DIR, "index.html")).exists())) {
+    throw new Error(`no studio build at ${BUILD_DIR} — run \`vp run studio#build\` first`);
+  }
+};
+
 const main = async (): Promise<void> => {
+  await requireStudioBuild();
   await mkdir(dirname(OUT), { recursive: true });
 
   const startedAt = performance.now();

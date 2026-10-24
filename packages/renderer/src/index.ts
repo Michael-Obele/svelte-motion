@@ -10,7 +10,9 @@
 export { serveBuild, type BuildServer } from "./serve.ts";
 export {
   captureFrame,
+  CHROMIUM_DETERMINISM_FLAGS,
   getCompositionsFromPage,
+  hasCompositionBridge,
   launchBrowser,
   openComposition,
   type FrameSize,

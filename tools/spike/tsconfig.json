@@ -13,7 +13,10 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@svelte-motion/renderer": ["../../packages/renderer/src/index.ts"]
+    }
   },
-  "include": ["determinism.ts", "render-demo.ts"]
+  "include": ["determinism.ts", "render-demo.ts", "verify-determinism.ts"]
 }

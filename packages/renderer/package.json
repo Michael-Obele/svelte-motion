@@ -28,6 +28,7 @@
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
+    "test:e2e": "SM_E2E=1 vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build"
   },
