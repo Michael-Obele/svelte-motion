@@ -1,105 +1,100 @@
-# svelte-remotion
+# svelte-motion
 
-![svelte-remotion banner](assets/banner.svg)
+![svelte-motion banner](assets/banner.svg)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=flat-square&logo=svelte&logoColor=white)](https://svelte.dev)
-[![SvelteKit](https://img.shields.io/badge/SvelteKit-2-FF3E00?style=flat-square&logo=svelte&logoColor=white)](https://kit.svelte.dev)
-[![Bun](https://img.shields.io/badge/Bun-%23000000.svg?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Standard Readme](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
-[![GitHub Stars](https://img.shields.io/github/stars/Michael-Obele/svelte-remotion?style=social)](https://github.com/Michael-Obele/svelte-remotion)
+[![SvelteKit](https://img.shields.io/badge/SvelteKit-3-FF3E00?style=flat-square&logo=svelte&logoColor=white)](https://svelte.dev/docs/kit)
+[![Vite+](https://img.shields.io/badge/Vite%2B-1.4-646CFF?style=flat-square&logo=vite&logoColor=white)](https://viteplus.dev)
+[![Bun](https://img.shields.io/badge/Bun-1.4.4-%23000000.svg?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![GitHub Stars](https://img.shields.io/github/stars/Michael-Obele/svelte-motion?style=social)](https://github.com/Michael-Obele/svelte-motion)
 
-Make videos programmatically with Svelte 5 — Remotion for Svelte, headless Chrome + FFmpeg.
+Make videos programmatically with Svelte 5. Remotion's pipeline, no React.
 
-Write a video as a Svelte component. The renderer screenshots every frame in headless Chromium and FFmpeg stitches them to MP4 — the same deterministic pipeline as Remotion, with no React and no virtual DOM tax. MIT licensed.
+A video is a Svelte component. The frame is reactive state. The renderer sets each frame in headless Chromium, screenshots it, and FFmpeg stitches the frames into an MP4. Same shape as Remotion, MIT licensed, with no virtual DOM in the loop.
 
 ## Table of Contents
 
 - [Background](#background)
+- [Status](#status)
 - [Install](#install)
 - [Usage](#usage)
-- [Features](#features)
 - [How it works](#how-it-works)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [API](#api)
+- [Project structure](#project-structure)
+- [Gates](#gates)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Background
 
-Remotion proved that code is the best video editor: a React component as a function of `frame`, a headless browser that screenshots every frame, and FFmpeg that encodes to MP4. The pipeline is framework-agnostic — if it paints in a browser tab, it paints in a frame.
+Remotion showed that code is a good video editor: a component as a function of the current frame, a headless browser that screenshots every frame, and FFmpeg that encodes the result. None of that depends on React. The browser only has to paint.
 
-**svelte-remotion** keeps that pipeline and swaps the authoring layer to Svelte 5. Runes (`$state`, `$derived`, `$props`, snippets) map cleanly to time: `frame` is reactive state, every animation is a derived value, and the browser does not pay a virtual-DOM cost for 1,800 frames. SvelteKit + Vite replace Webpack, Playwright replaces Puppeteer, and `Bun.spawn` drives FFmpeg.
+svelte-motion keeps the pipeline and swaps the authoring layer to Svelte 5 runes. `frame` is `$state`, every animation is `$derived`, and a frame is a pure function of its number, so the same frame renders the same bytes on every run.
 
-Why now: Svelte 5 runes and SvelteKit 2 are stable on Vite 6, agents write Svelte 5 fluently, and an MIT alternative has a clear incentive versus Remotion's company license. See [`AGENTS.md`](AGENTS.md) for the full spec index and build plan.
+## Status
+
+Working at version 0.1, not yet published to npm. Every workspace member builds, and the gates below run in this repo.
+
+What works today:
+
+- Frame runtime, timeline primitives, composition registry, and math helpers ported from Remotion 4.0.538 with parity tests
+- Player with playback, seek, and loop
+- Renderer that produces byte-identical MP4s across runs
+- CLI with `render` and `list`
+- Studio with a composition picker, preview, scrubber, and timeline bar
+
+Known limits:
+
+- Video only. Audio components exist for preview, but audio is not muxed into the MP4 yet.
+- The Studio timeline shows one track with a playhead. Sequence nesting bars need a timeline registry that does not exist yet.
+- `interpolate` does not implement Remotion's `output` and `outputType` CSS sugar (`perceptual-scale`, `font-weight`). Passing either option throws.
+- One browser page per concurrency slot, default concurrency 1.
 
 ## Install
 
-**Prerequisites**
-
-- Node 20+ (Node 22 for SvelteKit 3 / Vite 8) · [Bun](https://bun.sh) · [FFmpeg](https://ffmpeg.org) · Chromium via Playwright
-
-**Scaffold a new project**
+Prerequisites: [Bun](https://bun.sh) 1.4+, [FFmpeg](https://ffmpeg.org) on `PATH`, Chromium through Playwright.
 
 ```bash
-bunx sv create my-video --template minimal
-cd my-video
-bun install
+# FFmpeg
+brew install ffmpeg        # macOS
+sudo apt install ffmpeg    # Ubuntu / Debian
+
+# Chromium for Playwright
 bunx playwright install chromium
 ```
 
-**Add svelte-remotion** (when published)
+The packages are not published yet. To work from this repo:
 
 ```bash
-bun add svelte-remotion
-# or
-npm install svelte-remotion
+bun install
+vp run studio#build
+bun packages/cli/src/index.ts render hello-world --out out/video.mp4 --build apps/studio/build
 ```
-
-**System dependencies**
-
-```bash
-# FFmpeg — macOS
-brew install ffmpeg
-# FFmpeg — Ubuntu/Debian
-sudo apt update && sudo apt install ffmpeg
-# Verify
-ffmpeg -version
-npx playwright --version
-```
-
-> **Status: planning.** The package is not yet published. Follow the milestones in [`AGENTS.md`](AGENTS.md) — M0 proves determinism, M2 ships `svelte-remotion render`.
 
 ## Usage
 
 ### 1. Write a composition
 
-```html
-<!-- compositions/hello-world/HelloWorld.svelte -->
+```svelte
+<!-- src/compositions/hello-world/HelloWorld.svelte -->
 <script lang="ts">
-  import { getMotionContext } from "$lib/motion/context.svelte";
-  import { interpolate } from "$lib/math/interpolate";
+  import { interpolate, spring, getMotionContext } from "@svelte-motion/core";
 
   const motion = getMotionContext();
-  let opacity = $derived(interpolate(motion.frame, [0, 30], [0, 1]));
-  let scale = $derived(interpolate(motion.frame, [0, 30], [0.8, 1]));
+  const frame = $derived(motion.frame);
+  const opacity = $derived(interpolate(frame, [0, 30], [0, 1], { extrapolateRight: "clamp" }));
+  const rise = $derived(spring({ frame, fps: 30, config: { damping: 200 } }));
 </script>
 
-<div
-  style:opacity
-  style:transform="scale({scale})"
-  style:width="{motion.width}px"
-  style:height="{motion.height}px"
->
-  Hello at frame {motion.frame}
+<div style:opacity style:transform="translateY({(1 - rise) * 40}px)">
+  Hello at frame {frame}
 </div>
 ```
 
 ```ts
-// compositions/hello-world/index.ts
-import { defineComposition } from "$lib/motion/composition";
+// src/compositions/hello-world/index.ts
+import { defineComposition } from "@svelte-motion/core";
 import HelloWorld from "./HelloWorld.svelte";
 
 export default defineComposition({
@@ -112,148 +107,66 @@ export default defineComposition({
 });
 ```
 
-### 2. Timeline primitives
+### 2. Time it with the timeline
 
-```html
-<script lang="ts">
-  import Sequence from "$lib/timeline/Sequence.svelte";
-  import Series from "$lib/timeline/Series.svelte";
-</script>
-
-<!-- Offset time -->
-<Sequence from="{30}" durationInFrames="{60}">
+```svelte
+<Sequence from={30} durationInFrames={60}>
   {#snippet children({ frame })}
-  <div>Local frame {frame} — global {frame + 30}</div>
+    <p>Local frame {frame}</p>
   {/snippet}
 </Sequence>
-
-<!-- Back-to-back -->
-<Series>
-  {#snippet children()}
-  <Sequence durationInFrames="{30}"
-    >{#snippet children({ frame })}<title {frame} />{/snippet}</Sequence
-  >
-  <Sequence durationInFrames="{60}"
-    >{#snippet children({ frame })}
-    <main {frame} />
-    {/snippet}</Sequence
-  >
-  {/snippet}
-</Series>
 ```
+
+`Sequence`, `Series`, `Loop`, `Freeze`, `AbsoluteFill`, and `Clipper` are exported from `@svelte-motion/core`.
 
 ### 3. Preview and render
 
 ```bash
-# Studio — scrub, timeline, live preview
-bun run dev
+# Studio: picker, preview, scrubber, timeline
+vp run studio#dev
 
-# Headless render to MP4
-bunx svelte-remotion render hello-world --out out.mp4
-
-# With props
-bunx svelte-remotion render hello-world --props '{"title":"Hello"}' --out out.mp4
+# CLI: list compositions, then render one
+bun packages/cli/src/index.ts list --build apps/studio/build
+bun packages/cli/src/index.ts render hello-world --out out/video.mp4 --build apps/studio/build
 ```
 
-**Determinism rule:** compositions must be pure functions of `frame`. No `Math.random()`, `Date.now()`, or wall-clock reads — the renderer screenshots frames concurrently and out of order.
-
-## Features
-
-| Feature                  | Detail                                                                                                           |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| **Frame runtime**        | `MotionContext` via `setContext`/`getContext` + `$state` — `frame`, `fps`, `width`, `height`, `durationInFrames` |
-| **Timeline**             | `Sequence`, `Series`, `Loop`, `Freeze` as Svelte 5 snippets with frame-offset math                               |
-| **Math helpers**         | `interpolate`, `interpolateColors`, `spring`, `measureSpring`, `Easing` — pure TS, ported from Remotion          |
-| **Composition registry** | `defineComposition` + `import.meta.glob` discovery                                                               |
-| **Player**               | Svelte `Player` with `requestAnimationFrame`, scrubbing, and controls                                            |
-| **Renderer CLI**         | `svelte-remotion render` — serves build, drives Playwright, streams to FFmpeg                                    |
-| **Studio**               | SvelteKit app — composition picker, preview, scrubber, timeline                                                  |
-| **Assets**               | `delayRender`/`continueRender` + `ready` + `staticFile` + `document.fonts.ready` gate                            |
+Full API references live in the package READMEs: [core](packages/core/README.md), [renderer](packages/renderer/README.md), [cli](packages/cli/README.md), [studio](apps/studio/README.md).
 
 ## How it works
 
-```mermaid
-flowchart LR
-  A[Author writes Svelte composition<br/>frame -> pixels] --> B[Vite + SvelteKit<br/>bundle to static]
-  B --> C{Mode}
-  C -->|dev| D[Studio<br/>scrubber + preview]
-  C -->|render| E[Playwright<br/>headless Chromium]
-  E --> F[For frame 0..N<br/>set frame, wait ready,<br/>screenshot PNG]
-  F --> G[FFmpeg via Bun.spawn<br/>stitch PNGs to MP4]
-  G --> H[out.mp4]
-```
+1. Vite builds the Svelte app to static files.
+2. The renderer serves that build with `Bun.serve` and opens `/render?composition=<id>&frame=<n>` in headless Chromium.
+3. For each frame it sets the frame through `window.svelteMotion_setFrame(n)` and waits for the paint.
+4. Playwright screenshots the frame as a PNG.
+5. The PNGs stream into FFmpeg over `image2pipe` and come out as an MP4.
 
-1. **Bundle** — Vite + `vite-plugin-svelte` + `adapter-static` to `build/`.
-2. **Serve** — `vite preview` on a dedicated port (no HMR).
-3. **Capture** — `page.goto('...?composition=id&frame=N')` → wait `svelteMotion_ready()` + `document.fonts.ready` + `networkidle` → `page.screenshot({ clip })`.
-4. **Encode** — `Bun.spawn` FFmpeg: `ffmpeg -framerate 30 -i frame%04d.png -c:v libx264 -pix_fmt yuv420p out.mp4`.
-
-Concurrency runs multiple Chromium contexts; frames stream to FFmpeg via stdin for long videos.
-
-## Tech Stack
-
-| Layer      | Choice                              | Why                                                          |
-| ---------- | ----------------------------------- | ------------------------------------------------------------ |
-| UI         | Svelte 5 runes, SvelteKit 2, Vite 6 | Runes model time cleanly; SvelteKit gives routing + adapters |
-| Language   | TypeScript 5                        | Types for compositions and props                             |
-| Runtime    | Bun                                 | `Bun.spawn` for FFmpeg, fast installs                        |
-| Browser    | Playwright (Chromium)               | Stable screenshot API, multi-browser future                  |
-| Encoding   | FFmpeg (H.264)                      | Industry standard, CRF + keyframe control                    |
-| Validation | Valibot                             | Tree-shakable, SvelteKit remote-function friendly            |
-| Styling    | Tailwind CSS                        | Utility-first, Vite-native                                   |
-
-## Project Structure
+## Project structure
 
 ```
-svelte-remotion/
-├── assets/
-│   └── banner.svg
-├── src/
-│   ├── lib/
-│   │   ├── motion/       # context.svelte.ts, config.ts, composition.ts, ready.ts
-│   │   ├── timeline/     # Sequence.svelte, Series.svelte, Loop.svelte, Freeze.svelte
-│   │   ├── math/         # interpolate.ts, spring.ts, easing.ts (pure TS)
-│   │   ├── player/       # Player.svelte, PlayerControls.svelte
-│   │   ├── renderer/     # browser.ts, ffmpeg.ts, render.ts, assets.ts
-│   │   └── studio/       # Timeline.svelte, Scrubber.svelte, Preview.svelte
-│   ├── routes/           # SvelteKit Studio routes
-│   └── app.html
-├── compositions/         # user videos — each a .svelte file + defineComposition
-├── AGENTS.md             # agent & contributor guide (indexes the internal spec)
-└── README.md             # you are here
+packages/core       @svelte-motion/core      browser runtime: frame state, timeline, math, player
+packages/renderer   @svelte-motion/renderer  node only: serve, capture, encode
+packages/cli        @svelte-motion/cli       render and list commands
+apps/studio         dev studio and render host
+apps/web            landing page
+tools/spike         determinism and parity gates
 ```
 
-> Internal spec lives out of tree (gitignored). See [`AGENTS.md`](AGENTS.md) for the full document map and milestone gates.
+## Gates
 
-## API
+Determinism is a test here, not a promise:
 
-| Export                                  | Kind      | Description                                                                                 |
-| --------------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `getMotionContext` / `setMotionContext` | function  | Access the reactive `MotionContext` (`frame`, `fps`, `width`, `height`)                     |
-| `useCurrentFrame()`                     | function  | Returns current `frame` as `number`                                                         |
-| `useVideoConfig()`                      | function  | Returns `{ fps, width, height, durationInFrames }`                                          |
-| `defineComposition`                     | function  | Register a video (`id`, `component`, `width`, `height`, `fps`, `durationInFrames`, `props`) |
-| `Sequence`                              | component | Offsets time: `from`, `durationInFrames`, snippet `children({ frame })`                     |
-| `Series`                                | component | Lays out children back-to-back, computes `from` cumulatively                                |
-| `Loop` / `Freeze`                       | component | Repeat (`frame % duration`) / pin to fixed frame                                            |
-| `interpolate` / `interpolateColors`     | function  | Pure math — numeric, string, color interpolation with easing + extrapolate                  |
-| `spring` / `measureSpring`              | function  | Physics-based animation, duration measurement                                               |
-| `delayRender` / `continueRender`        | function  | Block screenshots until async work (fonts, data) resolves; `ready` is the shorthand         |
-| `Player`                                | component | Browser player at `fps` with controls and scrubbing                                         |
-| `svelte-remotion render`                | CLI       | `render <composition> --out <file> [--props JSON] [--concurrency N]`                        |
-
-Full React → Svelte translation table lives in the internal spec (see `AGENTS.md`).
+```bash
+vp check                                    # fmt, lint, typecheck
+vp run -r test                              # unit tests, every member
+bun run tools/spike/verify-determinism.ts   # same frames, same MP4 bytes
+bun run tools/spike/verify-player-parity.ts # player frame equals rendered frame
+cd packages/renderer && SM_E2E=1 vp test    # full render gates
+```
 
 ## Contributing
 
-PRs and issues are welcome. This is a Standard Readme project — see the [spec](https://github.com/RichardLitt/standard-readme/blob/main/spec.md).
-
-- **Questions?** Open a [GitHub Issue](https://github.com/Michael-Obele/svelte-remotion/issues) or [Discussion](https://github.com/Michael-Obele/svelte-remotion/discussions).
-- **PRs accepted.** Please lint (`bun run lint`) and test (`bun test`) before submitting. Keep compositions deterministic and add a test for new math helpers.
-- **Style:** Svelte 5 runes only, TypeScript strict, Valibot for props, `Bun.spawn` for subprocesses.
-
-See [`AGENTS.md`](AGENTS.md) for architecture, decisions, and milestone gates before starting work.
+Read [AGENTS.md](AGENTS.md). It lists the settled stack, the workspace commands, and the constraints that keep the pixel gates green. Keep `plan/` out of commits.
 
 ## License
 
-[MIT](LICENSE) © Michael Obele. Remotion is a separate project under its own [license](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md).
+MIT.

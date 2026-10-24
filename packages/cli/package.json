@@ -14,7 +14,7 @@
     "directory": "packages/cli"
   },
   "bin": {
-    "cli": "./dist/index.mjs"
+    "svelte-motion": "./dist/index.mjs"
   },
   "files": [
     "dist"

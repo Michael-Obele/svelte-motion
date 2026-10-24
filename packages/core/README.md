@@ -78,15 +78,15 @@ const compositions = collectCompositions(
 
 All timeline components narrow the frame their children see. Each one creates a `DerivedMotionContext` over its parent.
 
-| Component      | Props                                                                                  | What it does                                                                                                                      |
-| -------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `Sequence`     | `from?: number`, `durationInFrames?: number`, `children: Snippet<[{ frame: number }]>` | Shifts time by `from`. Children receive local frame as snippet argument and via context. Renders nothing when outside its window. |
-| `Series`       | `children: Snippet` containing `Series.Sequence` items                                 | Lays out children sequentially, computing `from` cumulatively from each item's `durationInFrames`.                                |
-| `Loop`         | `durationInFrames: number`, `times?: number`                                           | Wraps frame with modulo. `frame % durationInFrames`.                                                                              |
-| `Freeze`       | `frame: number`                                                                        | Pins children to a single frame.                                                                                                  |
-| `AbsoluteFill` | `style?: string`                                                                       | Fills the composition with absolute positioning.                                                                                  |
-| `Clipper`      | `width?, height?, style?`                                                              | Clips overflowing children with `overflow: hidden`.                                                                               |
-| `Stage`        | `width, height, background?`                                                           | Root stage with fixed size, `contain: strict`, and background color. Used internally by `MotionRoot` and `Player`.                |
+| Component      | Props                                                                                  | What it does                                                                                                                                            |
+| -------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Sequence`     | `from?: number`, `durationInFrames?: number`, `children: Snippet<[{ frame: number }]>` | Shifts time by `from`. Children receive local frame as snippet argument and via context. Renders nothing when outside its window.                       |
+| `Series`       | `items: SeriesItem[]` (`{ durationInFrames, snippet }` each)                           | Lays items out sequentially, computing `from` cumulatively from each item's `durationInFrames`. Snippets cannot be measured, so durations live in data. |
+| `Loop`         | `durationInFrames: number`, `times?: number`                                           | Wraps frame with modulo. `frame % durationInFrames`.                                                                                                    |
+| `Freeze`       | `frame: number`                                                                        | Pins children to a single frame.                                                                                                                        |
+| `AbsoluteFill` | `style?: string`                                                                       | Fills the composition with absolute positioning.                                                                                                        |
+| `Clipper`      | `width?, height?, style?`                                                              | Clips overflowing children with `overflow: hidden`.                                                                                                     |
+| `Stage`        | `width, height, background?`                                                           | Root stage with fixed size, `contain: strict`, and background color. Used internally by `MotionRoot` and `Player`.                                      |
 
 Snippet usage:
 

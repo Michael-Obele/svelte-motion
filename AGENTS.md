@@ -119,15 +119,15 @@ See `plan/svelte-mapping.md` for the full table and snippet examples.
 
 ## Milestones (M0–M6)
 
-| Milestone | Title                | Gate                                                                                  | Status    |
-| --------- | -------------------- | ------------------------------------------------------------------------------------- | --------- |
-| M0        | Recon and the spike  | Same component screenshots identically at frame 0 and 90, determinism holds           | done      |
-| M1        | Math and timeline    | `interpolate`/`spring`/`Sequence` match Remotion output, tests pass                   | done      |
-| M2        | Renderer CLI         | `svelte-motion render hello-world --out out.mp4` produces 3s MP4, frame count matches | done      |
-| M3        | Assets and readiness | Font-heavy composition with `delayRender` renders without blank frames                | done      |
-| M4        | Player               | `Player` plays at `fps` with scrubber, preview matches renderer PNG                   | done      |
-| M5        | Studio               | Composition picker, preview, scrubber, timeline with nesting                          | done      |
-| M6        | Polish, docs, skills | Docs, agent skills, Valibot props, CLI help, `bun test` pass                          | this task |
+| Milestone | Title                | Gate                                                                                                         | Status      |
+| --------- | -------------------- | ------------------------------------------------------------------------------------------------------------ | ----------- |
+| M0        | Recon and the spike  | Same component screenshots identically at frame 0 and 90, determinism holds                                  | done        |
+| M1        | Math and timeline    | `interpolate`/`spring`/`Sequence` match Remotion output, tests pass                                          | done        |
+| M2        | Renderer CLI         | `svelte-motion render hello-world --out out.mp4` produces 3s MP4, frame count matches                        | done        |
+| M3        | Assets and readiness | Font-heavy composition with `delayRender` renders without blank frames                                       | done        |
+| M4        | Player               | `Player` plays at `fps` with scrubber, preview matches renderer PNG                                          | done        |
+| M5        | Studio               | Composition picker, preview, scrubber, duration timeline bar (nested Sequence bars need a timeline registry) | mostly done |
+| M6        | Polish, docs, skills | Docs, Valibot props, CLI help, tests pass (agent skills not written yet)                                     | mostly done |
 
 See `plan/milestones.md` for commands and done-when checklists.
 
