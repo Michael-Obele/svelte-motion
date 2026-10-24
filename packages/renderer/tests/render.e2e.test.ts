@@ -383,4 +383,110 @@ describe("renderComposition (e2e)", () => {
     },
     TIMEOUT_MS,
   );
+
+  e2e(
+    "player frame 30 is byte-identical to render frame 30 (M4 parity gate)",
+    async () => {
+      await requireStudioBuild();
+
+      const { captureFrame, launchBrowser, openComposition } = await import("../src/browser.ts");
+      const { writeFile } = await import("node:fs/promises");
+      const server = await serveBuild(BUILD_DIR, 0);
+      const browser = await launchBrowser();
+
+      try {
+        const size = { width: 1920, height: 1080 };
+        const frame = 30;
+        const compositionId = "hello-world";
+
+        // PNG A: the render host at frame 30, via the existing captureFrame path.
+        const contextA = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
+        let pngA: Uint8Array;
+        try {
+          const pageA = await contextA.newPage();
+          await openComposition(pageA, server.url, compositionId, undefined, 30_000);
+          pngA = await captureFrame(pageA, frame, size, 30_000, compositionId);
+        } finally {
+          await contextA.close();
+        }
+
+        // PNG B: the player host at frame 30, paused, same viewport.
+        const contextB = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
+        let pngB: Uint8Array;
+        try {
+          const pageB = await contextB.newPage();
+          await pageB.goto(
+            server.url +
+              "/player?composition=" +
+              encodeURIComponent(compositionId) +
+              "&frame=" +
+              frame,
+            { waitUntil: "load" },
+          );
+          await pageB.waitForFunction(
+            () =>
+              (
+                window as unknown as { svelteMotion_ready?: () => boolean }
+              ).svelteMotion_ready?.() === true,
+            undefined,
+            { timeout: 30_000 },
+          );
+          await pageB.evaluate(async () => {
+            await document.fonts.ready;
+          });
+          await pageB.evaluate(
+            () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+          );
+          const rawB = await pageB.screenshot({
+            clip: { x: 0, y: 0, width: size.width, height: size.height },
+            type: "png",
+          });
+          pngB = new Uint8Array(rawB);
+        } finally {
+          await contextB.close();
+        }
+
+        if (
+          pngA.length !== pngB.length ||
+          Buffer.compare(Buffer.from(pngA), Buffer.from(pngB)) !== 0
+        ) {
+          let firstDiff = -1;
+          const len = Math.min(pngA.length, pngB.length);
+          for (let i = 0; i < len; i += 1) {
+            if (pngA[i] !== pngB[i]) {
+              firstDiff = i;
+              break;
+            }
+          }
+          if (firstDiff === -1 && pngA.length !== pngB.length) firstDiff = len;
+          const aPath = "/tmp/svelte-motion-parity-a.png";
+          const bPath = "/tmp/svelte-motion-parity-b.png";
+          await writeFile(aPath, pngA);
+          await writeFile(bPath, pngB);
+          throw new Error(
+            "Player/render parity failed: PNGs differ — " +
+              "render " +
+              pngA.length +
+              " bytes, player " +
+              pngB.length +
+              " bytes, " +
+              "first differing byte index " +
+              firstDiff +
+              " — " +
+              "wrote " +
+              aPath +
+              " and " +
+              bPath +
+              " for inspection",
+          );
+        }
+
+        expect(Buffer.compare(Buffer.from(pngA), Buffer.from(pngB))).toBe(0);
+      } finally {
+        await browser.close();
+        server.stop();
+      }
+    },
+    TIMEOUT_MS,
+  );
 });

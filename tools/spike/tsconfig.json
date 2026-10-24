@@ -18,5 +18,10 @@
       "@svelte-motion/renderer": ["../../packages/renderer/src/index.ts"]
     }
   },
-  "include": ["determinism.ts", "render-demo.ts", "verify-determinism.ts"]
+  "include": [
+    "determinism.ts",
+    "render-demo.ts",
+    "verify-determinism.ts",
+    "verify-player-parity.ts"
+  ]
 }
