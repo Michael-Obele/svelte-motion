@@ -34,6 +34,7 @@ export {
 } from "./motion/context.svelte.js";
 
 export { default as MotionRoot } from "./motion/MotionRoot.svelte";
+export { default as Stage } from "./motion/Stage.svelte";
 
 export {
   clearCompositions,
@@ -67,3 +68,12 @@ export { prefetch, staticFile } from "./motion/asset.js";
 /* -------------------------------------------------------------------------- */
 
 export * from "./timeline/index.js";
+
+/* -------------------------------------------------------------------------- */
+/* Player                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export { default as Player } from "./player/Player.svelte";
+export { default as PlayerControls } from "./player/PlayerControls.svelte";
+export { frameAt, frameElapsedMs } from "./player/frame-time.js";
+export type { PlayerControlsProps, PlayerProps } from "./player/types.js";

@@ -18,6 +18,7 @@
   import { onMount, tick, untrack, type Snippet } from "svelte";
   import { MotionContext } from "./context.svelte.js";
   import { setMotionContext, type VideoConfig } from "./context.svelte.js";
+  import Stage from "./Stage.svelte";
   import { installReadinessGlobal } from "./ready.js";
 
   let {
@@ -65,21 +66,6 @@
   });
 </script>
 
-<div
-  class="svelte-motion-root"
-  style:width="{width}px"
-  style:height="{height}px"
-  style:background
->
+<Stage {width} {height} background>
   {@render children()}
-</div>
-
-<style>
-  .svelte-motion-root {
-    position: relative;
-    overflow: hidden;
-    /* A composition is a picture, not a page: no scroll anchoring, no text
-       reflow surprises between frames. */
-    contain: strict;
-  }
-</style>
+</Stage>
