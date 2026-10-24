@@ -15,7 +15,7 @@ Requires `ffmpeg` on PATH and a built Studio. Playwright Chromium is installed w
 ## Usage
 
 ```
-svelte-motion — render Svelte compositions to video
+svelte-motion: render Svelte compositions to video
 
 Usage: svelte-motion <command> [options]
 
@@ -37,7 +37,7 @@ Run svelte-motion <command> --help for command-specific help.
 ### list
 
 ```
-svelte-motion list — list available compositions
+svelte-motion list: list available compositions
 
 Usage: svelte-motion list [--build <dir>] [--json]
 
@@ -56,7 +56,7 @@ Lists every composition the build registered. Text output is one line per compos
 ### render
 
 ```
-svelte-motion render — render a composition to video
+svelte-motion render: render a composition to video
 
 Usage: svelte-motion render <id> --out <file> [options]
 
@@ -83,7 +83,7 @@ Examples:
 | --------------- | ----------- | --------- | --------------------------------------------------------- |
 | `--out`         | string      | required  | Output MP4 path                                           |
 | `--build`       | string      | `build`   | Build directory, use `apps/studio/build` in this monorepo |
-| `--props`       | JSON string | —         | Props object, must be a JSON object not an array          |
+| `--props`       | JSON string |           | Props object, must be a JSON object not an array          |
 | `--concurrency` | number      | `1`       | Parallel chunks, must be at least 1                       |
 | `--crf`         | number      | `18`      | H.264 quality 0 to 51, lower is better                    |
 | `--codec`       | string      | `libx264` | Video codec for FFmpeg `-c:v`                             |

@@ -108,14 +108,14 @@ import { renderComposition } from "@svelte-motion/renderer";
 | `buildDir`       | `string`                  | required  | Directory holding the built Studio                 |
 | `compositionId`  | `string`                  | required  | Registry id, for example `hello-world`             |
 | `out`            | `string`                  | required  | Destination MP4 path, parent must exist            |
-| `props`          | `Record<string, unknown>` | —         | Passed through `?props=` as URL encoded JSON       |
+| `props`          | `Record<string, unknown>` |           | Passed through `?props=` as URL encoded JSON       |
 | `port`           | `number`                  | `0`       | Build server port, 0 is OS assigned                |
 | `concurrency`    | `number`                  | `1`       | Parallel chunks, each gets its own browser context |
 | `crf`            | `number`                  | `18`      | H.264 quality, lower is better                     |
 | `codec`          | `string`                  | `libx264` | Video codec for `-c:v`                             |
 | `preset`         | `string`                  | `medium`  | Encoder preset                                     |
 | `readyTimeoutMs` | `number`                  | `30000`   | How long to wait for readiness per frame           |
-| `onProgress`     | `(done, total) => void`   | —         | Called after each captured frame                   |
+| `onProgress`     | `(done, total) => void`   |           | Called after each captured frame                   |
 
 `RenderResult { frameCount, fps, width, height, durationInFrames, out, warnings, readyMs }`. Warnings are deduped `[svelte-motion]` console messages, capped at 50. `readyMs` is time spent waiting for readiness during the probe.
 

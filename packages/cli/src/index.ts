@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * svelte-motion CLI — render and list commands.
+ * svelte-motion CLI: render and list commands.
  *
  * Bun-native, stdlib-only parsing via `node:util` parseArgs. No new runtime
  * deps, no @svelte-motion/core import. Every server/browser is torn down in
@@ -21,7 +21,7 @@ import {
 // help text
 // ---------------------------------------------------------------------------
 
-const HELP_GENERAL = `svelte-motion — render Svelte compositions to video
+const HELP_GENERAL = `svelte-motion: render Svelte compositions to video
 
 Usage: svelte-motion <command> [options]
 
@@ -40,7 +40,7 @@ Examples:
 Run svelte-motion <command> --help for command-specific help.
 `;
 
-const HELP_LIST = `svelte-motion list — list available compositions
+const HELP_LIST = `svelte-motion list: list available compositions
 
 Usage: svelte-motion list [--build <dir>] [--json]
 
@@ -54,7 +54,7 @@ Examples:
   svelte-motion list --json --build apps/studio/build
 `;
 
-const HELP_RENDER = `svelte-motion render — render a composition to video
+const HELP_RENDER = `svelte-motion render: render a composition to video
 
 Usage: svelte-motion render <id> --out <file> [options]
 
@@ -344,7 +344,7 @@ async function runList(command: ListCommand): Promise<void> {
             { timeout: 5000 },
           );
         } catch {
-          // Bridge may already be there or may never appear — getCompositions will tell
+          // Bridge may already be there or may never appear, getCompositions will tell
         }
 
         const compositions = await getCompositionsFromPage(page);

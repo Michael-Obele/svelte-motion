@@ -48,7 +48,7 @@ Use frame primitives inside the component:
 </script>
 
 <div style:opacity={opacity} style:transform="translateX({x * 200}px)">
-  {title} — frame {frame}
+  {title}, frame {frame}
 </div>
 ```
 
@@ -142,7 +142,7 @@ Props (`PlayerProps` in `player/types.ts`):
 | `now`                                  | `() => number`     | `performance.now`       | Test seam for clock                         |
 | `schedule`                             | `(cb) => number`   | `requestAnimationFrame` | Test seam for frame scheduling              |
 | `cancel`                               | `(handle) => void` | `cancelAnimationFrame`  | Test seam for cancel                        |
-| `onFrame`                              | `(frame) => void`  | —                       | Called on every frame change                |
+| `onFrame`                              | `(frame) => void`  |                         | Called on every frame change                |
 
 Exports `play()`, `pause()`, `seek(n)` on the component instance. Helpers `frameAt(elapsedMs, fps, durationInFrames, loop)` and `frameElapsedMs(frame, fps)` are also exported for custom players.
 
