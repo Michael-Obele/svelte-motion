@@ -1,6 +1,6 @@
 {
   "name": "@svelte-motion/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Command line interface for rendering Svelte compositions to video.",
   "homepage": "https://github.com/Michael-Obele/svelte-motion#readme",
   "bugs": {
