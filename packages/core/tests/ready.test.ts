@@ -161,3 +161,30 @@ describe("resetReadiness", () => {
     expect(resolved).toBe(true);
   });
 });
+
+describe("installReadinessGlobal", () => {
+  test("installs both globals and cleanup removes them", async () => {
+    const bridge = window as unknown as Record<string, unknown>;
+    delete bridge.svelteMotion_ready;
+    delete bridge.svelteMotion_pendingHandles;
+
+    const mod = await import("../src/lib/motion/ready.js");
+    mod.installReadinessGlobal();
+
+    expect(typeof bridge.svelteMotion_ready).toBe("function");
+    expect(typeof bridge.svelteMotion_pendingHandles).toBe("function");
+    expect((bridge.svelteMotion_pendingHandles as () => string[])()).toEqual([]);
+
+    // Verify pending labels flow through the global.
+    const handle = mod.delayRender("test-label");
+    expect((bridge.svelteMotion_pendingHandles as () => string[])()).toEqual(["test-label"]);
+    mod.continueRender(handle);
+    expect((bridge.svelteMotion_pendingHandles as () => string[])()).toEqual([]);
+
+    // Cleanup: remove globals (MotionRoot does this on unmount; we simulate).
+    delete bridge.svelteMotion_ready;
+    delete bridge.svelteMotion_pendingHandles;
+    expect(bridge.svelteMotion_ready).toBeUndefined();
+    expect(bridge.svelteMotion_pendingHandles).toBeUndefined();
+  });
+});

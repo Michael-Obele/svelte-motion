@@ -59,6 +59,8 @@
     return () => {
       delete bridge.svelteMotion_setFrame;
       delete bridge.svelteMotion_getFrame;
+      delete bridge.svelteMotion_ready;
+      delete bridge.svelteMotion_pendingHandles;
     };
   });
 </script>

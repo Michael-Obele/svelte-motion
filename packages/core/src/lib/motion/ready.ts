@@ -77,11 +77,19 @@ export const resetReadiness = (): void => {
   pendingLabels.clear();
 };
 
-/** Installs `window.svelteMotion_ready`, which the renderer polls. */
+/**
+ * Installs `window.svelteMotion_ready` and `window.svelteMotion_pendingHandles`.
+ *
+ * The renderer polls `svelteMotion_ready()` to know when a frame is safe to
+ * screenshot, and reads `svelteMotion_pendingHandles()` to name the handles
+ * that are still open when it times out.
+ */
 export const installReadinessGlobal = (): void => {
   if (typeof window === "undefined") {
     return;
   }
 
-  (window as unknown as Record<string, unknown>).svelteMotion_ready = isReady;
+  const bridge = window as unknown as Record<string, unknown>;
+  bridge.svelteMotion_ready = isReady;
+  bridge.svelteMotion_pendingHandles = getPendingLabels;
 };

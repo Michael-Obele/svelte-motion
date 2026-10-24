@@ -60,6 +60,8 @@ export {
   type SvelteMotionEnvironment,
 } from "./motion/env.js";
 
+export { prefetch, staticFile } from "./motion/asset.js";
+
 /* -------------------------------------------------------------------------- */
 /* Timeline                                                                    */
 /* -------------------------------------------------------------------------- */
