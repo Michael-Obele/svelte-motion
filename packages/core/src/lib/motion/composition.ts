@@ -14,11 +14,19 @@
 import type { Component } from "svelte";
 import { safeParse, type GenericSchema } from "valibot";
 
-/** A component plus the shape it must be rendered at. */
-export type CompositionConfig<Props extends Record<string, unknown> = Record<string, unknown>> = {
+/**
+ * A component plus the shape it must be rendered at.
+ *
+ * `Record<string, any>` and `Component<Props, any, any>` rather than `unknown`
+ * and the defaults: a composition whose component takes no props is
+ * `Component<Record<string, never>, {}, "">`, and props are contravariant, so the
+ * narrower defaults reject it.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any -- see the note above */
+export type CompositionConfig<Props extends Record<string, any> = Record<string, any>> = {
   /** Kebab-case, unique. Used as `?composition=<id>`. */
   id: string;
-  component: Component<Props>;
+  component: Component<any, any, any>;
   width: number;
   height: number;
   fps: number;

@@ -40,10 +40,9 @@
     TIMELINE_KEY,
   ) ?? { depth: -1, absoluteFrom: 0 };
   const depth = parentPos.depth + 1;
-  // ponytail: `from` is init-only by design — a Sequence's offset is fixed at
-  // mount (ancestors never change under a mounted instance); a reactive
-  // `from` would need re-deriving the whole subtree position.
-  const offset = from;
+  // A Sequence's offset is fixed at mount: ancestors never change under a mounted
+  // instance. `untrack` says so out loud and silences state_referenced_locally.
+  const offset = untrack(() => from);
   setContext<TimelinePosition>(TIMELINE_KEY, {
     depth,
     absoluteFrom: parentPos.absoluteFrom + offset,
