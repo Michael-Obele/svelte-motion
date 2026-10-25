@@ -44,26 +44,50 @@ Module layout — a Vite+ workspace with Bun workspaces, scaffolded by the `vp` 
 ```
 packages/core/       # @svelte-motion/core      browser-only: motion/, timeline/, math/, player/
                      #                          built with svelte-package (tsdown cannot compile .svelte)
+packages/studio-ui/  # @svelte-motion/studio-ui component library: <Studio>, <RenderHost>,
+                     #                          <PlayerHost>. No `$app/*`, so any app can mount it
 packages/renderer/   # @svelte-motion/renderer  node-only: browser.ts, ffmpeg.ts, render.ts, assets.ts
 packages/cli/        # @svelte-motion/cli       bin; standalone executable later via pack.exe
-apps/studio/         # SvelteKit dev server: Timeline, Scrubber, Preview
+apps/studio/         # SvelteKit authoring host: its own fixtures + /render + /player for the gates
 apps/web/            # homepage + docs (SvelteKit + shadcn-svelte)
-examples/            # compositions consumed by studio, docs, and renderer tests
+examples/            # SvelteKit app the way a user writes one: 7 compositions + gallery + hosts
 ```
 
 The split is a hard boundary, not tidiness: the renderer shells out to Playwright and FFmpeg, so
 it must never be reachable from a browser bundle. `core` stays free of Node built-ins; anything
 that needs the filesystem belongs in `renderer`.
 
+The dependency arrow is one-way: **apps use the studio, never the reverse.** `examples` and
+`apps/studio` both mount `<Studio>` from `packages/studio-ui`, and each app owns its own
+composition glob, URL state and `/render` + `/player` routes. That is why `studio-ui` must never
+import `$app/state` or `$app/navigation` — routes cannot live in a package, so anything
+route-shaped stays in the app that owns it.
+
+The two apps resolve `@svelte-motion/core` differently **on purpose**:
+
+- `apps/studio` aliases it to `src/lib/index.ts`, so authoring never hits a stale `dist`.
+- `examples` takes it from `workspace:*` → `dist`, so it exercises the _published_ entry points
+  the way a real install does. A broken `exports` map or a missing `.d.ts` re-export fails here
+  and nowhere else. It therefore needs `vp run core#build` first (`bun run build:examples`
+  handles that ordering for you).
+
 Workspace commands (`vp` is Vite+, `vpr` is `vp run`):
 
 ```bash
-vp run -r build        # recursive, cache-aware build of every member
+bun run dev            # the examples app: gallery + Studio, all 7 compositions
+bun run dev:studio     # the fixture harness (hello-world + fixture-*), for gate work
+vp run -r build        # recursive, cache-aware build of every member (dependency order)
 vp run studio#dev      # one member by package name
 vp -C apps/studio dev  # one member by directory
 vp check               # fmt + lint + typecheck across the workspace
 vp run -r test         # every member's tests (cached)
-vp run studio#build    # build the Studio for rendering
+vp run studio#build    # build the studio (fixtures + hosts used by the gates)
+
+# The examples app installs core from dist, so build core first
+bun run build:examples # = vp run -t examples#build (core, then examples)
+bun run dev:examples   # = vp run core#build && vp run examples#dev
+bun run check:examples # svelte-check over the examples app
+
 SM_E2E=1 vp test       # per-package e2e, run inside the package dir (vp run cache ignores env vars)
 bun run tools/spike/verify-determinism.ts  # M0 determinism gate
 bun run tools/spike/verify-player-parity.ts  # M4 player parity gate
@@ -84,14 +108,21 @@ See `plan/architecture.md` for the full component table, interfaces, and failure
 - **D6** Playwright over Puppeteer (multi-browser, stable screenshot API).
 - **D7** `Bun.spawn` for FFmpeg (stdin streaming).
 - **D8** Valibot for props validation (Zod accepted as alternative).
-- **D15** Vite+ (`vp`) monorepo on Bun workspaces, five members, `@svelte-motion/*` scope — supersedes D11. See `plan/decisions.md` for the scaffold-time version findings.
+- **D15** Vite+ (`vp`) monorepo on Bun workspaces, seven members, `@svelte-motion/*` scope — supersedes D11. See `plan/decisions.md` for the scaffold-time version findings.
+- **D16** `packages/studio-ui` is a private component library consumed from source; the studio chrome
+  takes compositions as a prop and reports selection through a callback. Apps own routes, URL state
+  and globs. See `plan/decisions.md`.
+- **D17** `examples/` is a scaffolded SvelteKit app (`sv create --template minimal`), not a folder of
+  loose components. It consumes `@svelte-motion/core` from `dist` on purpose.
 
 Open questions live in `plan/decisions.md`: Studio timeline scope, system FFmpeg vs shipped binaries, Zod acceptance.
 SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path.
 
 ## Rendering pipeline (determinism is the gate)
 
-1. **Bundle** — `vp run studio#build` via Vite + `vite-plugin-svelte` + `adapter-static` to `apps/studio/build/`.
+1. **Bundle** — `vp run studio#build` via Vite + `vite-plugin-svelte` + `adapter-static` to `apps/studio/build/`
+   (or `vp run examples#build` to `examples/build/`; both apps serve the same `/render` and
+   `/player` hosts from `packages/studio-ui`).
 2. **Serve** — `Bun.serve` on `127.0.0.1` with SPA fallback to `index.html` (no HMR, no `vite preview`).
 3. **Capture** — Playwright `page.goto('.../render?composition=id&frame=N')` → wait `svelteMotion_ready()` + `document.fonts.ready` → `page.screenshot({ clip })`.
 4. **Encode** — `Bun.spawn` FFmpeg image2pipe: `ffmpeg -framerate 30 -f image2pipe -vcodec png -i pipe:0 -c:v libx264 -pix_fmt yuv420p -map_metadata -1 -fflags +bitexact out.mp4`.
@@ -142,6 +173,10 @@ See `plan/milestones.md` for commands and done-when checklists.
 
 ## Where to look next
 
-- Product code (when scaffolded): `src/lib/motion/context.svelte.ts`, `src/lib/timeline/Sequence.svelte`, `src/lib/renderer/render.ts`
+- Frame runtime: `packages/core/src/lib/motion/context.svelte.ts`
+- Timeline primitives: `packages/core/src/lib/timeline/`
+- Studio surfaces: `packages/studio-ui/src/lib/` (`Studio`, `RenderHost`, `PlayerHost`, `host-params`)
+- A user-facing composition: `examples/src/lib/compositions/title-card/`
+- Render pipeline: `packages/renderer/src/render.ts`
 - Full Remotion source (read-only reference): `plan/repomix/remotion.xml`
 - Public overview: `README.md`

@@ -76,7 +76,7 @@ bun packages/cli/src/index.ts render hello-world --out out/video.mp4 --build app
 
 ### 1. Write a composition
 
-```svelte
+```html
 <!-- src/compositions/hello-world/HelloWorld.svelte -->
 <script lang="ts">
   import { interpolate, spring, getMotionContext } from "@svelte-motion/core";
@@ -87,9 +87,7 @@ bun packages/cli/src/index.ts render hello-world --out out/video.mp4 --build app
   const rise = $derived(spring({ frame, fps: 30, config: { damping: 200 } }));
 </script>
 
-<div style:opacity style:transform="translateY({(1 - rise) * 40}px)">
-  Hello at frame {frame}
-</div>
+<div style:opacity style:transform="translateY({(1 - rise) * 40}px)">Hello at frame {frame}</div>
 ```
 
 ```ts
@@ -109,10 +107,10 @@ export default defineComposition({
 
 ### 2. Time it with the timeline
 
-```svelte
-<Sequence from={30} durationInFrames={60}>
+```html
+<Sequence from="{30}" durationInFrames="{60}">
   {#snippet children({ frame })}
-    <p>Local frame {frame}</p>
+  <p>Local frame {frame}</p>
   {/snippet}
 </Sequence>
 ```
@@ -122,13 +120,17 @@ export default defineComposition({
 ### 3. Preview and render
 
 ```bash
-# Studio: picker, preview, scrubber, timeline
-vp run studio#dev
+# Gallery + Studio: picker, preview, scrubber, timeline
+bun run dev
 
 # CLI: list compositions, then render one
-bun packages/cli/src/index.ts list --build apps/studio/build
-bun packages/cli/src/index.ts render hello-world --out out/video.mp4 --build apps/studio/build
+bun packages/cli/src/index.ts list --build examples/build
+bun packages/cli/src/index.ts render title-card --out out/video.mp4 --build examples/build
 ```
+
+`bun run dev` opens the examples app. `bun run dev:studio` opens the fixture harness —
+the compositions the determinism and parity gates render, kept separate so that editing an
+example cannot break a gate.
 
 Full API references live in the package READMEs: [core](packages/core/README.md), [renderer](packages/renderer/README.md), [cli](packages/cli/README.md), [studio](apps/studio/README.md).
 
@@ -145,16 +147,17 @@ CSS, three use Tailwind, and together they cover every timeline primitive:
 - `quote-series` (Tailwind): `Series` stepping through a quote, one line at a time
 - `loop-ticker` (Tailwind): `Loop` driving an endless ticker with no timer
 
-Run everything from the repository root, because the CLI path and `--build` are
-relative to it:
+Run everything from the repository root. The examples live in their own SvelteKit app, which
+installs `@svelte-motion/core` from the package — the same setup you would have after
+`bun add @svelte-motion/core`:
 
 ```bash
-# See them in the studio, then pick one from the sidebar
-vp run studio#dev
+# Gallery + Studio for the examples (builds core first, since the app uses its dist)
+bun run dev:examples
 
 # Or render one to a file
-vp run studio#build
-bun packages/cli/src/index.ts render stat-grid --out out/stat-grid.mp4 --build apps/studio/build
+bun run build:examples
+bun packages/cli/src/index.ts render stat-grid --out out/stat-grid.mp4 --build examples/build
 ```
 
 ## How it works
@@ -169,10 +172,12 @@ bun packages/cli/src/index.ts render stat-grid --out out/stat-grid.mp4 --build a
 
 ```
 packages/core       @svelte-motion/core      browser runtime: frame state, timeline, math, player
+packages/studio-ui  @svelte-motion/studio-ui picker, preview, scrubber, timeline, /render + /player hosts
 packages/renderer   @svelte-motion/renderer  node only: serve, capture, encode
 packages/cli        @svelte-motion/cli       render and list commands
-apps/studio         dev studio and render host
+apps/studio         authoring host for the studio's own fixtures + the render gates
 apps/web            landing page
+examples            a normal SvelteKit app: 7 compositions, a gallery, and the render hosts
 tools/spike         determinism and parity gates
 ```
 

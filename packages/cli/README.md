@@ -14,7 +14,7 @@ Requires `ffmpeg` on PATH and a built Studio. Playwright Chromium is installed w
 
 ## Usage
 
-```
+```bash
 svelte-motion: render Svelte compositions to video
 
 Usage: svelte-motion <command> [options]
@@ -36,7 +36,7 @@ Run svelte-motion <command> --help for command-specific help.
 
 ### list
 
-```
+```bash
 svelte-motion list: list available compositions
 
 Usage: svelte-motion list [--build <dir>] [--json]
@@ -55,7 +55,7 @@ Lists every composition the build registered. Text output is one line per compos
 
 ### render
 
-```
+```bash
 svelte-motion render: render a composition to video
 
 Usage: svelte-motion render <id> --out <file> [options]

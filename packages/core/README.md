@@ -36,7 +36,7 @@ export default defineComposition({
 
 Use frame primitives inside the component:
 
-```svelte
+```html
 <script lang="ts">
   import { getMotionContext, interpolate, spring } from "@svelte-motion/core";
 
@@ -47,20 +47,20 @@ Use frame primitives inside the component:
   const x = $derived(spring({ frame, fps: 30 }));
 </script>
 
-<div style:opacity={opacity} style:transform="translateX({x * 200}px)">
+<div style:opacity="{opacity}" style:transform="translateX({x * 200}px)">
   {title}, frame {frame}
 </div>
 ```
 
 Mount it for rendering:
 
-```svelte
+```html
 <script lang="ts">
   import { MotionRoot } from "@svelte-motion/core";
   import HelloWorld from "./HelloWorld.svelte";
 </script>
 
-<MotionRoot fps={30} width={1920} height={1080} durationInFrames={90} initialFrame={0}>
+<MotionRoot fps="{30}" width="{1920}" height="{1080}" durationInFrames="{90}" initialFrame="{0}">
   <HelloWorld title="Hello" />
 </MotionRoot>
 ```
@@ -90,10 +90,10 @@ All timeline components narrow the frame their children see. Each one creates a 
 
 Snippet usage:
 
-```svelte
-<Sequence from={30} durationInFrames={60}>
+```html
+<Sequence from="{30}" durationInFrames="{60}">
   {#snippet children({ frame })}
-    <div>local frame {frame}</div>
+  <div>local frame {frame}</div>
   {/snippet}
 </Sequence>
 ```
@@ -102,7 +102,7 @@ Snippet usage:
 
 Browser playback at `fps` with seek and loop. Wall clock is used only for timing, never for rendering.
 
-```svelte
+```html
 <script lang="ts">
   import { Player } from "@svelte-motion/core";
   import MyComp from "./MyComp.svelte";

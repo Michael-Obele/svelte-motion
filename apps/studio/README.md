@@ -1,13 +1,31 @@
 # Studio
 
-Dev app, render host, and player preview for svelte-motion. This is the SvelteKit app that owns the composition registry and serves the two pixel surfaces the renderer screenshots.
+The studio's own SvelteKit app: a hermetic render host for the gate compositions, and a
+place to author the fixtures those gates depend on.
 
 ## What it is
 
-- Authoring Studio at `/` with composition picker, Player preview, scrubber, and timeline.
+- Authoring Studio at `/`, mounting `<Studio>` from `@svelte-motion/studio-ui` over this
+  app's own compositions.
 - Render host at `/render` that draws one frame of one composition with no chrome, driven by the renderer through query params.
 - Player host at `/player` that draws one paused frame through `<Player>` for parity checks.
 - Composition detail at `/compositions/[id]` with a JSON props editor.
+
+The UI itself — picker, preview, transport, scrubber, timeline, and both pixel hosts — lives
+in [`packages/studio-ui`](../../packages/studio-ui). This app owns only what an app must own:
+routes, the composition glob, and URL state.
+
+**Only fixtures live here**, never examples. `hello-world` is what the determinism and
+parity gates render, and `fixture-*` cover missing assets, a stuck `delayRender`, and a
+font-heavy load. Keeping them separate is deliberate: editing an example must not be able to
+change what a gate measures.
+
+To browse the real compositions, use the examples app instead:
+
+```bash
+bun run dev        # the examples app: gallery + Studio, all 7 compositions
+bun run dev:studio # this app, for gate work
+```
 
 ## Run
 
