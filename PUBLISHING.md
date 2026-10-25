@@ -7,18 +7,37 @@ lowest first.
 
 ## 1. Authenticate
 
-```bash
-bun login
+`bun login` does **not** exist. Bun reserves the subcommand and exits with:
+
+```
+Uh-oh. bun login is a subcommand reserved for future use by Bun.
 ```
 
-Check it worked before continuing:
+So authenticate with the real npm CLI. One thing will bite first: npm refuses to run
+**inside this repo**, because the root `devEngines` pins Bun and npm exits with
+`EBADDEVENGINES Invalid name "bun" does not match "npm"`. Run it from your home directory.
 
 ```bash
-bun pm whoami
+cd ~
+npm login           # web auth; writes //registry.npmjs.org/:_authToken to ~/.npmrc
 ```
 
-A `401 Unauthorized` here means the token in `~/.npmrc` is stale. Log in again rather than
+Verify from anywhere — this one is a Bun command and works fine:
+
+```bash
+bun pm whoami       # prints your npm username
+```
+
+A `401 Unauthorized` means the token in `~/.npmrc` is stale. Log in again rather than
 publishing with an old token.
+
+If the machine has no browser for web auth, create a _Granular Access Token_ on npmjs.com
+(read + write, restricted to the `@svelte-motion` scope, with 2FA bypass if you use it in
+CI later) and add it to `~/.npmrc`:
+
+```
+//registry.npmjs.org/:_authToken=npm_...
+```
 
 ## 2. Build and verify
 
@@ -53,6 +72,7 @@ cd packages/core && bun publish --dry-run
 ## 4. Verify
 
 ```bash
+cd ~                # npm cannot run inside this repo — see step 1
 npm view @svelte-motion/core version
 npm view @svelte-motion/cli dependencies
 ```
