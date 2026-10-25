@@ -10,7 +10,7 @@
   ],
   "type": "module",
   "scripts": {
-    "ready": "vp run -r build && vp check && vp run -r test && bun run tools/spike/verify-determinism.ts",
+    "ready": "vp run -r build && bun run check && vp run -r test && bun run tools/spike/verify-determinism.ts",
     "dev": "vp run core#build && vp run examples#dev",
     "dev:studio": "vp run studio#dev",
     "dev:web": "vp run web#dev",
@@ -18,6 +18,7 @@
     "build:examples": "vp run -t examples#build",
     "check:examples": "vp run examples#check",
     "changeset": "changeset",
+    "check": "vp check && vp run -r check",
     "version-packages": "changeset version",
     "spike": "vp run studio#build && bun run tools/spike/determinism.ts",
     "render-demo": "bun run tools/spike/render-demo.ts",

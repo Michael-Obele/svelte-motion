@@ -47,7 +47,11 @@ jobs:
       # type declarations do not exist until it has been built; checking first
       # fails on any fresh checkout with TS2307 across every core import.
       - run: ./node_modules/.bin/vp run -r build
-      - run: ./node_modules/.bin/vp check
+      # `vp check` is the linter and type-checker, and tsc cannot parse `.svelte`.
+      # `bun run check` adds `vp run -r check`, which runs each member's own
+      # svelte-check — the only thing that sees inside a component. Without it a
+      # broken prop type or a `never` from a mis-narrowed ref passes CI clean.
+      - run: bun run check
       - run: ./node_modules/.bin/vp run -r test
 
       - name: Require a changeset for published packages

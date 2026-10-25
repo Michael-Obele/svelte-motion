@@ -78,7 +78,7 @@ jobs:
       # Build first: core is consumed from `dist`, so its types must exist before
       # anything type-checks against them.
       - run: ./node_modules/.bin/vp run -r build
-      - run: ./node_modules/.bin/vp check
+      - run: bun run check
       - run: ./node_modules/.bin/vp run -r test
 
       # Order is forced by the dependency graph: `cli` depends on `renderer`, so
