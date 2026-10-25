@@ -21,6 +21,12 @@ export type PlayerProps<Props extends Record<string, unknown> = Record<string, u
   loop?: boolean;
   /** Show built-in controls. Default true. */
   controls?: boolean;
+  /**
+   * Whether playback is running. Bindable, so a host can render its own
+   * transport instead of the built-in one and still show the real state.
+   * Default false.
+   */
+  isPlaying?: boolean;
   /** Test seam: clock. Default `() => performance.now()`. */
   now?: () => number;
   /** Test seam: schedule. Default `requestAnimationFrame`. */

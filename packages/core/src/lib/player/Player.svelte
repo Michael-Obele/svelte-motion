@@ -26,6 +26,7 @@
     autoPlay = false,
     loop = true,
     controls = true,
+    isPlaying = $bindable(false),
     now = () => (typeof performance !== "undefined" ? performance.now() : 0),
     schedule = (cb: FrameRequestCallback): number =>
       typeof requestAnimationFrame !== "undefined"
@@ -51,7 +52,6 @@
   setMotionContext(context);
   context.frame = untrack(() => clamp(startFrame));
 
-  let isPlaying = $state(false);
   const frame = $derived(context.frame);
 
   let origin = 0;
