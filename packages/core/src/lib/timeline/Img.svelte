@@ -21,8 +21,11 @@
     }
   });
 
-  let handle: number | null = $state(null);
-  let settled = $state(false);
+  // Plain `let`, not `$state`: these are imperative bookkeeping for the
+  // non-reactive handle set in `ready.ts`, never rendered. A `$state` write
+  // inside the `$effect` below — which also reads them — would dirty itself.
+  let handle: number | null = null;
+  let settled = false;
 
   const settle = () => {
     if (settled) return;

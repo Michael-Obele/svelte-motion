@@ -20,8 +20,10 @@
     }
   });
 
-  let handle: number | null = $state(null);
-  let settled = $state(false);
+  // Plain `let`, not `$state`: imperative bookkeeping for the non-reactive
+  // handle set in `ready.ts`, never rendered.
+  let handle: number | null = null;
+  let settled = false;
 
   const settle = () => {
     if (settled) return;

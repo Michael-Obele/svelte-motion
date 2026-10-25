@@ -26,10 +26,13 @@
 
   let audioEl: HTMLAudioElement | undefined = $state(undefined);
 
-  let initialHandle: number | null = $state(null);
-  let initialSettled = $state(false);
-  let seekHandle: number | null = $state(null);
-  let seekSettled = $state(true);
+  // Plain `let`, not `$state`: imperative bookkeeping for the non-reactive
+  // handle set in `ready.ts`, never rendered. Marking these reactive made the
+  // seek effect dirty itself, because it both reads and writes them.
+  let initialHandle: number | null = null;
+  let initialSettled = false;
+  let seekHandle: number | null = null;
+  let seekSettled = true;
 
   const settleInitial = () => {
     if (initialSettled) return;
