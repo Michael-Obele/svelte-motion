@@ -30,6 +30,7 @@ export {
   useCurrentFrame,
   useVideoConfig,
   type MotionState,
+  type SequenceEntry,
   type VideoConfig,
 } from "./motion/context.svelte.js";
 

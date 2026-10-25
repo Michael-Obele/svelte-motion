@@ -9,7 +9,11 @@
    * deterministically without fake timers.
    */
   import { onMount, untrack } from "svelte";
-  import { MotionContext, setMotionContext } from "../motion/context.svelte.js";
+  import {
+    MotionContext,
+    setMotionContext,
+    type SequenceEntry,
+  } from "../motion/context.svelte.js";
   import Stage from "../motion/Stage.svelte";
   import PlayerControls from "./PlayerControls.svelte";
   import { frameAt, frameElapsedMs } from "./frame-time.js";
@@ -31,7 +35,11 @@
     schedule = (cb: FrameRequestCallback): number =>
       typeof requestAnimationFrame !== "undefined"
         ? requestAnimationFrame(cb)
-        : (setTimeout(() => cb(typeof performance !== "undefined" ? performance.now() : 0), 16) as unknown as number),
+        : (setTimeout(
+            () =>
+              cb(typeof performance !== "undefined" ? performance.now() : 0),
+            16,
+          ) as unknown as number),
     cancel = (handle: number): void => {
       if (typeof cancelAnimationFrame !== "undefined") {
         cancelAnimationFrame(handle);
@@ -48,7 +56,9 @@
     return Math.max(0, Math.min(n, max));
   };
 
-  const context = untrack(() => new MotionContext({ fps, width, height, durationInFrames }));
+  const context = untrack(
+    () => new MotionContext({ fps, width, height, durationInFrames }),
+  );
   setMotionContext(context);
   context.frame = untrack(() => clamp(startFrame));
 
@@ -98,6 +108,11 @@
     context.frame = clamped;
     onFrame?.(clamped);
     origin = now() - frameElapsedMs(clamped, fps);
+  }
+
+  /** Live timeline registry for the Studio. Reactive when read inside `$derived`. */
+  export function getSequences(): SequenceEntry[] {
+    return context.getSequences();
   }
 
   onMount(() => {

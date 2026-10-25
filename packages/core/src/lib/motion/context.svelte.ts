@@ -25,7 +25,30 @@ export type MotionState = VideoConfig & {
   readonly frame: number;
 };
 
+/** One mounted `Sequence`, for the Studio timeline. */
+export type SequenceEntry = {
+  /** Stable id (author-provided or auto-generated). */
+  id: string;
+  /** `from` prop as written (relative to the parent Sequence). */
+  from: number;
+  /** Global offset: sum of `from` over self plus ancestors. */
+  absoluteFrom: number;
+  /** `durationInFrames` prop; `undefined` means unbounded. */
+  durationInFrames: number | undefined;
+  /** Nesting depth: 0 for top-level, +1 per ancestor Sequence. */
+  depth: number;
+};
+
 const MOTION_KEY = Symbol("svelte-motion/context");
+
+/** Capability check for registry forwarding (parent may be root or derived). */
+type SequenceHost = {
+  registerSequence?: (entry: SequenceEntry) => void;
+  unregisterSequence?: (id: string) => void;
+  getSequences?: () => SequenceEntry[];
+  clearSequences?: () => void;
+  sequences?: SequenceEntry[];
+};
 
 /**
  * Root frame state. One instance per rendered composition.
@@ -40,6 +63,9 @@ export class MotionContext implements MotionState {
   width = $state(1920);
   height = $state(1080);
   durationInFrames = $state(90);
+
+  /** Live timeline registry: one entry per mounted `Sequence`. */
+  sequences = $state<SequenceEntry[]>([]);
 
   constructor(config: Partial<VideoConfig> = {}) {
     if (config.fps !== undefined) this.fps = config.fps;
@@ -59,6 +85,34 @@ export class MotionContext implements MotionState {
   /** Move to a frame. Named so intent is obvious at call sites. */
   seek(frame: number): void {
     this.#frame = frame;
+  }
+
+  /** Register a Sequence, or update the entry when the id already exists. */
+  registerSequence(entry: SequenceEntry): void {
+    const at = this.sequences.findIndex((s) => s.id === entry.id);
+    if (at >= 0) {
+      this.sequences[at] = entry;
+    } else {
+      this.sequences.push(entry);
+    }
+  }
+
+  /** Remove a Sequence. Unknown ids are a no-op. */
+  unregisterSequence(id: string): void {
+    const at = this.sequences.findIndex((s) => s.id === id);
+    if (at >= 0) {
+      this.sequences.splice(at, 1);
+    }
+  }
+
+  /** Reactive copy of the registry. */
+  getSequences(): SequenceEntry[] {
+    return [...this.sequences];
+  }
+
+  /** Test escape hatch. */
+  clearSequences(): void {
+    this.sequences = [];
   }
 }
 
@@ -96,6 +150,26 @@ export class DerivedMotionContext implements MotionState {
 
   get durationInFrames(): number {
     return this.#parent.durationInFrames;
+  }
+
+  registerSequence(entry: SequenceEntry): void {
+    (this.#parent as unknown as SequenceHost).registerSequence?.(entry);
+  }
+
+  unregisterSequence(id: string): void {
+    (this.#parent as unknown as SequenceHost).unregisterSequence?.(id);
+  }
+
+  getSequences(): SequenceEntry[] {
+    return (this.#parent as unknown as SequenceHost).getSequences?.() ?? [];
+  }
+
+  get sequences(): SequenceEntry[] {
+    return (this.#parent as unknown as SequenceHost).sequences ?? this.getSequences();
+  }
+
+  clearSequences(): void {
+    (this.#parent as unknown as SequenceHost).clearSequences?.();
   }
 }
 
