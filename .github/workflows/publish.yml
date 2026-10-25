@@ -56,7 +56,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
+          # No `registry-url` on purpose: it writes an .npmrc holding
+          # `_authToken=${NODE_AUTH_TOKEN}`, which logs a failed-substitution
+          # warning and leaves a stale-token code path. OIDC is the only
+          # credential here, and npmjs.org is the default registry anyway.
           # Caching a release build is how you ship a stale tarball.
           # Requires setup-node v5 or newer.
           package-manager-cache: false

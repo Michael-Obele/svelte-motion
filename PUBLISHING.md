@@ -158,6 +158,23 @@ Three details that decide whether this works:
 - A newly created trusted publisher **expires after two days** unless it completes one
   successful publish. Set it up when you are ready to release, not weeks ahead.
 
+### Enable direct publishing, not just staged
+
+This one is easy to miss and produces a confusing error. Trusted publishers created after
+Sep 03, 2026 default to allowing only `npm stage publish` — a staged upload that a maintainer
+must approve with 2FA. A plain `pnpm publish` is a _direct_ publish and is refused with:
+
+```
+Failed to publish package @svelte-motion/core@0.1.2 (status 403 Forbidden):
+  {"error":"OIDC permission denied for this action"}
+```
+
+Note the OIDC token is fetched successfully and the provenance statement is signed before
+this error — it is a permission on the action, not an authentication failure.
+
+In the trusted publisher form, select **Allow npm publish** as well. An existing connection
+cannot be edited, so delete it and create a new one with both actions allowed.
+
 ### Releasing
 
 ```bash
