@@ -23,17 +23,22 @@ import {
 
 const HELP_GENERAL = `svelte-motion: render Svelte compositions to video
 
-Usage: svelte-motion <command> [options]
+Usage: svelte-motion [command] [options]
 
 Commands:
   list    List available compositions
   render  Render a composition to video
+
+With no command, svelte-motion opens an interactive browser: pick a
+composition with the arrow keys, press enter to render it, and watch live
+progress. Ctrl+C cancels a render; q quits.
 
 Options:
   --help, -h         Show help
   --build <dir>      Build directory (default: build, try --build apps/studio/build in this monorepo)
 
 Examples:
+  svelte-motion
   svelte-motion list --build apps/studio/build
   svelte-motion render hello-world --out out/hello-world.mp4 --build apps/studio/build
 
@@ -88,6 +93,7 @@ function helpFor(topic?: string): string {
 // ---------------------------------------------------------------------------
 
 export type HelpCommand = { kind: "help"; topic?: "render" | "list" };
+export type TuiCommand = { kind: "tui"; build: string };
 export type ListCommand = { kind: "list"; build: string; json: boolean };
 export type RenderCommand = {
   kind: "render";
@@ -101,7 +107,7 @@ export type RenderCommand = {
   preset?: string;
   port: number;
 };
-export type Command = HelpCommand | ListCommand | RenderCommand;
+export type Command = HelpCommand | TuiCommand | ListCommand | RenderCommand;
 export type CliError = { kind: "error"; message: string };
 
 // ---------------------------------------------------------------------------
@@ -109,8 +115,10 @@ export type CliError = { kind: "error"; message: string };
 // ---------------------------------------------------------------------------
 
 export function parseCliArgs(argv: string[]): Command | CliError {
+  // No command means interactive mode — the equivalent of `git add -p` for a
+  // renderer: browse, pick, watch it go. Scripted use keeps the named commands.
   if (argv.length === 0) {
-    return { kind: "error", message: `No command provided.\n${HELP_GENERAL}` };
+    return { kind: "tui", build: "build" };
   }
 
   const hasHelp = argv.includes("--help") || argv.includes("-h");
@@ -302,6 +310,25 @@ export function parseCliArgs(argv: string[]): Command | CliError {
     }
   }
 
+  // A bare `--build <dir>` (no command) still means interactive mode: the flag
+  // is global, so a user pointing the TUI at another app should not be told
+  // their option is an unknown command.
+  if (command.startsWith("-")) {
+    try {
+      const { values } = parseArgs({
+        args: argv,
+        options: { build: { type: "string" } },
+        allowPositionals: false,
+        strict: true,
+      });
+
+      return { kind: "tui", build: (values.build as string | undefined) ?? "build" };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { kind: "error", message: `${message}\n${HELP_GENERAL}` };
+    }
+  }
+
   return { kind: "error", message: `Unknown command "${command}".\n${HELP_GENERAL}` };
 }
 
@@ -441,12 +468,15 @@ export async function main(argv: string[]): Promise<void> {
   }
 
   try {
-    if (parsed.kind === "list") {
+    if (parsed.kind === "tui") {
+      const { runTui } = await import("./tui.ts");
+      process.exitCode = await runTui(parsed.build);
+    } else if (parsed.kind === "list") {
       await runList(parsed);
     } else if (parsed.kind === "render") {
       await runRender(parsed);
     }
-    process.exitCode = 0;
+    process.exitCode ??= 0;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`error: ${message}`);

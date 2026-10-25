@@ -199,11 +199,11 @@ describe("parseCliArgs", () => {
     }
   });
 
-  test("errors: no command", () => {
+  test("no arguments opens the interactive TUI", () => {
     const result = parseCliArgs([]);
-    expect(result.kind).toBe("error");
-    if (result.kind === "error") {
-      expect(result.message).toMatch(/No command provided/);
+    expect(result.kind).toBe("tui");
+    if (result.kind === "tui") {
+      expect(result.build).toBe("build");
     }
   });
 
