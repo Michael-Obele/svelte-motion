@@ -1,0 +1,83 @@
+# Releases.
+#
+# Publishes the three public packages to npm using trusted publishing: no token
+# exists in this file or in repository secrets. GitHub mints a short-lived OIDC
+# token, npm exchanges it for a publish credential, and npm attaches a provenance
+# attestation automatically (no `--provenance` flag needed).
+#
+# Prerequisites, all outside this file:
+#
+#   1. A trusted publisher configured on npmjs.com for EACH package
+#      (Settings -> Trusted publishing), with:
+#        Organization: Michael-Obele
+#        Repository:   svelte-motion
+#        Workflow:     publish.yml   <- must match this filename exactly, case-sensitive
+#   2. The repository must be public. Provenance is not emitted for private repos.
+#   3. A new trusted publisher expires if its first successful publish does not
+#      happen within 2 days, so configure it when you are ready to release.
+#
+# npm does not validate the trusted-publisher form on save; a mismatch only shows
+# up as ENEEDAUTH at publish time.
+
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# `id-token: write` is the only credential. It lets GitHub mint the OIDC token that
+# npm exchanges for a publish credential.
+permissions:
+  contents: read
+  id-token: write
+
+# Never let two releases race each other onto the registry.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      # pnpm publishes; bun installs and builds. pnpm is here because it rewrites
+      # `workspace:*` to a real version in the packed manifest, which npm does not.
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          # Caching a release build is how you ship a stale tarball.
+          # Requires setup-node v5 or newer.
+          package-manager-cache: false
+
+      - run: bun install --frozen-lockfile
+
+      # `vp` resolves from the workspace root's node_modules/.bin.
+      - run: ./node_modules/.bin/vp run -r build
+      - run: ./node_modules/.bin/vp run -r test
+
+      # Order is forced by the dependency graph: `cli` depends on `renderer`, so
+      # renderer must exist on the registry before cli's manifest can resolve.
+      # Each package's own prepack/prepublishOnly still runs the real build.
+      - name: Publish @svelte-motion/core
+        working-directory: packages/core
+        run: pnpm publish --no-git-checks
+
+      - name: Publish @svelte-motion/renderer
+        working-directory: packages/renderer
+        run: pnpm publish --no-git-checks
+
+      - name: Publish @svelte-motion/cli
+        working-directory: packages/cli
+        run: pnpm publish --no-git-checks
