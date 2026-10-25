@@ -1,0 +1,12 @@
+packages:
+  - packages/*
+  - apps/*
+  - examples
+  - tools/*
+
+# Mirrors the `catalog` block in the root package.json, which is what bun and
+# Vite+ read. pnpm only reads catalogs from this file, so the two must agree.
+catalog:
+  svelte: ^5.57.2
+  vite: npm:@voidzero-dev/vite-plus-core@1.4.0
+  vite-plus: 1.4.0

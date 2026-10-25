@@ -4,10 +4,6 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowImportingTsExtensions": true,
-    "esModuleInterop": true,
-    "paths": {
-      "@svelte-motion/core": ["./packages/core/src/lib/index.ts"],
-      "valibot": ["./packages/core/node_modules/valibot/dist/index.d.mts"]
-    }
+    "esModuleInterop": true
   }
 }

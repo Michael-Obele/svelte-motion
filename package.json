@@ -5,13 +5,18 @@
   "workspaces": [
     "packages/*",
     "apps/*",
+    "examples",
     "tools/*"
   ],
   "type": "module",
   "scripts": {
     "ready": "vp check && vp run -r test && vp run -r build",
-    "dev": "vp run studio#dev",
+    "dev": "vp run core#build && vp run examples#dev",
+    "dev:studio": "vp run studio#dev",
     "dev:web": "vp run web#dev",
+    "dev:examples": "vp run core#build && vp run examples#dev",
+    "build:examples": "vp run -t examples#build",
+    "check:examples": "vp run examples#check",
     "spike": "vp run studio#build && bun run tools/spike/determinism.ts",
     "render-demo": "bun run tools/spike/render-demo.ts",
     "test:e2e": "vp run renderer#test:e2e",
@@ -20,6 +25,7 @@
     "verify:player": "vp run studio#build && bun run tools/spike/verify-player-parity.ts"
   },
   "devDependencies": {
+    "svelte": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },
@@ -37,6 +43,7 @@
     "node": ">=22.18.0"
   },
   "catalog": {
+    "svelte": "^5.57.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
     "vite-plus": "1.4.0"
   }
