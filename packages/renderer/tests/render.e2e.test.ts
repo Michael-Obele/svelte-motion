@@ -34,6 +34,12 @@ import { installBunShim } from "./bun-shim.ts";
 /* Three levels up from `packages/renderer/tests/` — the repo root. */
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const BUILD_DIR = join(REPO_ROOT, "apps", "studio", "build");
+/*
+ * The examples live in their own app, so they are rendered by `examples/build`.
+ * That is deliberate: an example proves itself when the app a user would write can
+ * render it, not when a sandbox that knows where the folder is can.
+ */
+const EXAMPLES_BUILD_DIR = join(REPO_ROOT, "examples", "build");
 
 /** Two renders plus frame capture; the default 5 s would be a bad joke. */
 const TIMEOUT_MS = 600_000;
@@ -51,10 +57,17 @@ const e2e = test.skipIf(!process.env.SM_E2E);
 
 /** Fails with the command that fixes it, not with ENOENT. */
 const requireStudioBuild = async (): Promise<void> => {
-  const index = Bun.file(join(BUILD_DIR, "index.html"));
+  await requireBuild(BUILD_DIR);
+};
+
+/** Fails with the command that fixes it, not with ENOENT. */
+const requireBuild = async (dir: string): Promise<void> => {
+  const index = Bun.file(join(dir, "index.html"));
 
   if (!(await index.exists())) {
-    throw new Error(`no studio build at ${BUILD_DIR} — run \`vp run studio#build\` first`);
+    throw new Error(
+      `no build at ${dir} — run \`vp run ${dir === BUILD_DIR ? "studio" : "examples"}#build\` first`,
+    );
   }
 };
 
@@ -550,9 +563,9 @@ describe("renderComposition (e2e)", () => {
     { id: "lower-third", frames: 120 },
     { id: "image-gallery", frames: 120 },
     { id: "data-chart", frames: 150 },
-    // Tailwind examples. They also prove the studio's `@source` directive
-    // reaches outside the app root, because none of their utilities exist in
-    // the studio's own markup.
+    // Tailwind examples. They also prove the examples app's `@source` directive
+    // reaches into `packages/studio-ui`, because none of their utilities exist in
+    // that package's own markup.
     { id: "stat-grid", frames: 120 },
     { id: "quote-series", frames: 150 },
     { id: "loop-ticker", frames: 120 },
@@ -562,14 +575,14 @@ describe("renderComposition (e2e)", () => {
     e2e(
       `example "${example.id}" renders ${example.frames} frames with no warnings`,
       async () => {
-        await requireStudioBuild();
+        await requireBuild(EXAMPLES_BUILD_DIR);
 
         const dir = await makeTempDir();
         const out = join(dir, `${example.id}.mp4`);
 
         try {
           const result = await renderComposition({
-            buildDir: BUILD_DIR,
+            buildDir: EXAMPLES_BUILD_DIR,
             compositionId: example.id,
             out,
           });
