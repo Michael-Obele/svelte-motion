@@ -25,6 +25,9 @@
 /* -------------------------------------------------------------------------- */
 
 export { default as Studio } from "./Studio.svelte";
+export { default as Timeline } from "./Timeline.svelte";
+export { default as PropsEditor } from "./PropsEditor.svelte";
+export type { PlayerApi, PropsEditorProps, StudioProps, TimelineProps } from "./studio-types.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Pixel hosts                                                                 */

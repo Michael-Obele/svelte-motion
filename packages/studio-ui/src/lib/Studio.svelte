@@ -17,63 +17,60 @@
      * pixels as before Tailwind.
      */
     import { untrack } from "svelte";
+    import { Maximize, Pause, Play, ZoomIn, ZoomOut } from "@lucide/svelte";
     import { Player, type CompositionConfig } from "@svelte-motion/core";
     import { clampFrame, formatDuration } from "./format.js";
+    import PropsEditor from "./PropsEditor.svelte";
+    import Timeline from "./Timeline.svelte";
+    import type { PlayerApi, StudioProps } from "./studio-types.js";
 
-    let {
-        compositions,
-        initialId,
-        onselect,
-    }: {
-        compositions: CompositionConfig[];
-        /** Composition shown first. Falls back to the first registered one. */
-        initialId?: string;
-        /** Called after the user picks a different composition. */
-        onselect?: (id: string) => void;
-    } = $props();
+    let { compositions, initialId, onselect }: StudioProps = $props();
 
     const isKnownId = (id: string | null | undefined): id is string =>
         id !== null &&
         id !== undefined &&
         compositions.some((composition) => composition.id === id);
 
-    // Init-only read of a prop: the host app decides the opening selection once and
-    // owns the URL from then on, so this must not re-run when `initialId` changes.
-    let activeId = $state(
-        untrack(() =>
-            isKnownId(initialId) ? initialId : (compositions[0]?.id ?? ""),
+    // Init-only reads: the host app decides the opening selection once and owns
+    // the URL from then on, so these must not re-run when props change.
+    const initialActiveId = untrack(() =>
+        isKnownId(initialId) ? initialId : (compositions[0]?.id ?? ""),
+    );
+    let activeId = $state(initialActiveId);
+    let liveProps = $state<Record<string, unknown>>(
+        untrack(
+            () =>
+                ({
+                    ...((compositions.find(
+                        (composition) => composition.id === initialActiveId,
+                    )?.defaultProps ?? {}) as Record<string, unknown>),
+                }) as Record<string, unknown>,
         ),
     );
     let frame = $state(0);
     let isPlaying = $state(false);
-    let playerRef: {
-        play: () => void;
-        pause: () => void;
-        seek: (frame: number) => void;
-    } | null = $state(null);
+    let playerRef: PlayerApi | null = $state(null);
 
     const active = $derived(
         compositions.find((composition) => composition.id === activeId),
     );
     const duration = $derived(active?.durationInFrames ?? 0);
     const fps = $derived(active?.fps ?? 30);
-    const playhead = $derived(
-        duration > 0 ? (clampFrame(frame, duration) / duration) * 100 : 0,
-    );
-    const tickCount = $derived(fps > 0 ? Math.floor(duration / fps) : 0);
-    const ticks = $derived(
-        Array.from({ length: tickCount + 1 }, (_, second) => second),
-    );
+    // Reactive through the Player's registry: re-runs when mounted Sequences change.
+    const sequences = $derived(playerRef?.getSequences?.() ?? []);
 
     const seekTo = (next: number): void => {
-        const api = playerRef as { seek: (frame: number) => void } | null;
-        api?.seek(clampFrame(next, duration));
+        playerRef?.seek(clampFrame(next, duration));
     };
 
     const select = (id: string): void => {
         if (id === activeId) return;
         activeId = id;
         frame = 0;
+        liveProps = {
+            ...((compositions.find((composition) => composition.id === id)
+                ?.defaultProps ?? {}) as Record<string, unknown>),
+        };
         // The host owns navigation. `apps/studio` writes `?composition=`; the
         // examples gallery ignores it. Either way this component stays route-free.
         onselect?.(id);
@@ -119,14 +116,47 @@
     };
 
     const togglePlay = (): void => {
-        const api = playerRef as { play: () => void; pause: () => void } | null;
-
-        if (api === null) return;
+        if (playerRef === null) return;
 
         if (isPlaying) {
-            api.pause();
+            playerRef.pause();
         } else {
-            api.play();
+            playerRef.play();
+        }
+    };
+
+    /*
+     * Keyboard transport. Plain `svelte:window` handler, zero new deps:
+     * `runed` is not installed, and a keydown switch is all this needs.
+     * Never fires from editable elements.
+     */
+    const onKeyDown = (event: KeyboardEvent): void => {
+        const target = event.target as HTMLElement | null;
+        const tag = target?.tagName?.toLowerCase();
+        if (
+            tag === "input" ||
+            tag === "textarea" ||
+            tag === "select" ||
+            target?.isContentEditable === true
+        ) {
+            return;
+        }
+
+        if (event.key === " ") {
+            event.preventDefault();
+            togglePlay();
+        } else if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            seekTo(frame - (event.shiftKey ? fps : 1));
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            seekTo(frame + (event.shiftKey ? fps : 1));
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            seekTo(0);
+        } else if (event.key === "End") {
+            event.preventDefault();
+            seekTo(duration - 1);
         }
     };
 
@@ -161,6 +191,8 @@
         return () => observer.disconnect();
     });
 </script>
+
+<svelte:window onkeydown={onKeyDown} />
 
 <div class="flex h-screen bg-studio text-ink">
     <aside
@@ -218,9 +250,14 @@
                     type="button"
                     onclick={togglePlay}
                     aria-label={isPlaying ? "Pause" : "Play"}
+                    title={isPlaying ? "Pause (space)" : "Play (space)"}
                     class="rounded border border-line bg-panel px-4 py-1.5 text-sm font-medium transition-colors hover:border-accent hover:text-accent"
                 >
-                    {isPlaying ? "Pause" : "Play"}
+                    {#if isPlaying}
+                        <Pause size={14} />
+                    {:else}
+                        <Play size={14} />
+                    {/if}
                 </button>
 
                 <span class="ml-1 text-xs tabular-nums text-muted">
@@ -233,9 +270,10 @@
                         type="button"
                         onclick={zoomOut}
                         aria-label="Zoom out"
+                        title="Zoom out"
                         class="h-7 w-7 rounded border border-line bg-panel text-sm leading-none hover:border-accent hover:text-accent"
                     >
-                        −
+                        <ZoomOut size={14} />
                     </button>
                     <span
                         class="w-14 text-center text-xs tabular-nums text-muted"
@@ -247,17 +285,20 @@
                         type="button"
                         onclick={zoomIn}
                         aria-label="Zoom in"
+                        title="Zoom in"
                         class="h-7 w-7 rounded border border-line bg-panel text-sm leading-none hover:border-accent hover:text-accent"
                     >
-                        +
+                        <ZoomIn size={14} />
                     </button>
                     <button
                         type="button"
                         onclick={zoomToFit}
                         disabled={atFit}
+                        aria-label="Fit"
+                        title="Fit"
                         class="ml-1 rounded border border-line bg-panel px-2 py-1 text-xs hover:border-accent hover:text-accent disabled:cursor-default disabled:opacity-40 disabled:hover:border-line disabled:hover:text-inherit"
                     >
-                        Fit
+                        <Maximize size={14} />
                     </button>
                 </div>
             </div>
@@ -274,8 +315,8 @@
             >
                 <div
                     class="shrink-0"
-                    style="width: {active.width * scale}px; height: {active.height *
-                        scale}px;"
+                    style="width: {active.width *
+                        scale}px; height: {active.height * scale}px;"
                 >
                     <div
                         class="origin-top-left"
@@ -287,8 +328,7 @@
                                 bind:this={playerRef}
                                 bind:isPlaying
                                 component={Component}
-                                inputProps={(active.defaultProps ??
-                                    {}) as Record<string, unknown>}
+                                inputProps={liveProps}
                                 fps={active.fps}
                                 width={active.width}
                                 height={active.height}
@@ -329,24 +369,20 @@
                 >
             </div>
 
-            <!-- Sequence nesting bars: blocked on a timeline registry (see plan M5) -->
-            <div class="relative mt-2 h-10 rounded border border-line bg-panel">
-                {#each ticks as second (second)}
-                    <div
-                        class="absolute top-0 bottom-0 w-px bg-line"
-                        style="left: {((second * active.fps) /
-                            active.durationInFrames) *
-                            100}%"
-                    ></div>
-                {/each}
-                <div
-                    class="absolute top-0 bottom-0 w-0.5 bg-accent"
-                    style="left: {playhead}%"
-                ></div>
-            </div>
-            <p class="mt-1 text-xs text-muted">
-                {formatDuration(active.durationInFrames, active.fps)} total
-            </p>
+            <Timeline
+                durationInFrames={active.durationInFrames}
+                fps={active.fps}
+                {frame}
+                {sequences}
+            />
+
+            <PropsEditor
+                composition={active}
+                value={liveProps}
+                onChange={(next) => {
+                    liveProps = next;
+                }}
+            />
         {:else}
             <p class="text-sm text-muted">No compositions registered.</p>
         {/if}
