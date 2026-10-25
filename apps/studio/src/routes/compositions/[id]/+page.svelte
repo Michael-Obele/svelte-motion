@@ -24,73 +24,15 @@
 
 <script lang="ts">
   import { page } from "$app/state";
-  import { getComposition, Player } from "@svelte-motion/core";
-  import { safeParse } from "valibot";
+  import { getComposition } from "@svelte-motion/core";
+  import PropsEditor from "./PropsEditor.svelte";
 
   const compositionId = $derived(page.params.id ?? "");
   const composition = $derived(getComposition(compositionId));
-
-  const stringify = (value: unknown): string => JSON.stringify(value ?? {}, null, 2);
-
-  let draft = $state("");
-  let draftFor = $state("");
-  let appliedProps = $state<Record<string, unknown>>({});
-  let error = $state<string | undefined>(undefined);
-
-  /** Keep the editor in sync when navigating between compositions. */
-  $effect(() => {
-    if (composition !== undefined && draftFor !== composition.id) {
-      draftFor = composition.id;
-      draft = stringify(composition.defaultProps);
-      appliedProps = (composition.defaultProps ?? {}) as Record<string, unknown>;
-      error = undefined;
-    }
-  });
-
-  const formatIssues = (
-    issues: readonly { path?: readonly { key: unknown }[]; message: string }[],
-  ): string =>
-    issues
-      .map((issue) => {
-        const path = issue.path?.map((item) => String(item.key)).join(".");
-        return `${path === undefined || path === "" ? "(root)" : path}: ${issue.message}`;
-      })
-      .join("; ");
-
-  const apply = (): void => {
-    if (composition === undefined) return;
-
-    let parsed: unknown;
-
-    try {
-      parsed = JSON.parse(draft);
-    } catch {
-      error = "Invalid JSON: could not parse the props object.";
-      return;
-    }
-
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      error = "Invalid JSON: props must be a JSON object.";
-      return;
-    }
-
-    if (composition.schema !== undefined) {
-      const result = safeParse(composition.schema, parsed);
-
-      if (!result.success) {
-        error = formatIssues(result.issues);
-        return;
-      }
-    }
-
-    error = undefined;
-    appliedProps = parsed as Record<string, unknown>;
-  };
 </script>
 
 <div class="min-h-screen bg-studio p-6 text-ink">
   {#if composition}
-    {@const Component = composition.component}
     <a href="/" class="text-sm text-accent hover:underline">← All compositions</a>
     <h1 class="mt-2 text-lg font-semibold">{composition.id}</h1>
     <p class="mt-1 text-sm text-muted">
@@ -98,44 +40,14 @@
       {composition.durationInFrames} frames
     </p>
 
-    <div class="mt-4 overflow-auto">
-      {#key `${composition.id}-${JSON.stringify(appliedProps)}`}
-        <Player
-          component={Component}
-          inputProps={appliedProps}
-          fps={composition.fps}
-          width={composition.width}
-          height={composition.height}
-          durationInFrames={composition.durationInFrames}
-          startFrame={0}
-          loop={true}
-          controls={true}
-        />
-      {/key}
-    </div>
-
-    <div class="mt-4 max-w-2xl">
-      <label for="props-editor" class="text-sm font-medium">Props (JSON)</label>
-      <textarea
-        id="props-editor"
-        rows="8"
-        bind:value={draft}
-        spellcheck="false"
-        class="mt-1 w-full rounded border border-line bg-panel p-3 font-mono text-sm text-ink"
-      ></textarea>
-      <div class="mt-2 flex items-center gap-3">
-        <button
-          type="button"
-          onclick={apply}
-          class="rounded bg-accent px-4 py-1.5 text-sm font-medium text-studio"
-        >
-          Apply
-        </button>
-        {#if error !== undefined}
-          <p class="text-sm text-red-400">{error}</p>
-        {/if}
-      </div>
-    </div>
+    <!--
+      Keyed by id so navigating to another composition destroys the editor and
+      re-runs its state initialisers — the draft, applied props and error all
+      belong to one composition.
+    -->
+    {#key composition.id}
+      <PropsEditor {composition} />
+    {/key}
   {:else}
     <h1 class="text-lg font-semibold">Unknown composition</h1>
     <p class="mt-2 text-sm text-muted">

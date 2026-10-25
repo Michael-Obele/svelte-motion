@@ -8,16 +8,14 @@ import { lazyPlugins } from "vite-plus";
 export default defineConfig({
   resolve: {
     alias: {
-      // The `examples/` folder lives outside this app's root, so bun never links
-      // `@svelte-motion/core` into a `node_modules` the resolver can see from
-      // there. Point it at core's source: the studio then always reflects the
-      // library it ships with, and there is no stale `dist` to forget to rebuild.
+      // App compositions and the shared Studio surfaces resolve `@svelte-motion/core`
+      // to its source, not its `dist`. That keeps the preview honest — what you see is
+      // the library you are editing, with no stale build to forget about. The examples
+      // app deliberately does the opposite (it installs the package) so the published
+      // entry points get exercised.
       "@svelte-motion/core": fileURLToPath(
         new URL("../../packages/core/src/lib/index.ts", import.meta.url),
       ),
-      // Same reason: `examples/data-chart` imports valibot for its props schema.
-      // `import.meta.resolve` picks the ESM entry, not the CJS one.
-      valibot: fileURLToPath(import.meta.resolve("valibot")),
     },
   },
   plugins: lazyPlugins(() => [
