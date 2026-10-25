@@ -1,0 +1,69 @@
+# Versioning.
+#
+# Applies pending changesets and opens (or updates) a "Version Packages" pull
+# request that bumps every package in the fixed group and writes the changelogs.
+# Merging that pull request is what releases: the action then tags the bumped
+# versions and creates the GitHub releases, and each release fires `publish.yml`
+# (which does the actual npm publish through OIDC trusted publishing).
+#
+# Why the bump lives here and not in `publish.yml`: that workflow runs on
+# `release: published`, i.e. *after* a version exists. It has nothing to bump.
+#
+# Two things outside this file:
+#
+#   1. Repository settings -> Actions -> General -> "Allow GitHub Actions to
+#      create and approve pull requests" must be enabled, or the version pull
+#      request is never created.
+#   2. Normal pull requests still go through the usual review; this only opens
+#      one branch (`changeset-release/main`).
+#
+# Verified 2026-10-25 against the changesets/action README (v2, for Changesets
+# v3 — this repo runs @changesets/cli 3.0.3) and `changeset --help`, where the
+# tag command is `git-tag`, not `tag`.
+
+name: release
+
+on:
+  push:
+    branches: [main]
+
+# Serialise version runs: two of them racing would each rewrite the same
+# package.json files and the second would conflict with the first.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  # Write, to push the version commit and the tags.
+  contents: write
+  # Write, to open and update the version pull request.
+  pull-requests: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - run: bun install --frozen-lockfile
+
+      - uses: changesets/action@v2
+        with:
+          # Bumps versions + changelogs and deletes the applied changeset files.
+          version-script: ./node_modules/.bin/changeset version
+          # Runs only once no changesets remain. Tags what was just merged;
+          # `publish.yml` owns the npm publish, so this must not publish.
+          publish-script: ./node_modules/.bin/changeset git-tag
+          commit-message: "chore(release): version packages"
+          pr-title: "chore(release): version packages"
+          # Tags -> GitHub releases -> `release: published` -> publish.yml.
+          create-github-releases: "true"
+          push-git-tags: "true"
+          # The GitHub API attributes the commit to the token owner (Michael)
+          # and signs it with GitHub's key. The Git CLI would commit as whatever
+          # `user.name` CI defaults to, which is nobody.
+          push-with-git-cli: "false"
