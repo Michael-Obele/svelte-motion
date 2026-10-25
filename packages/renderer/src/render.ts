@@ -60,6 +60,12 @@ export type RenderOptions = {
   preset?: string;
   /** Called after each captured frame with the running and expected totals. */
   onProgress?: (done: number, total: number) => void;
+  /**
+   * Cancels the render. Checked before each captured frame; aborting throws an
+   * error whose `name` is `AbortError`, and the browser and server are still
+   * torn down in `finally`.
+   */
+  signal?: AbortSignal;
   /** How long to wait for readiness before failing. Defaults to 30_000. */
   readyTimeoutMs?: number;
 };
@@ -260,13 +266,40 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
       const total = config.durationInFrames;
       const size = { width: config.width, height: config.height };
 
-      // Keyed by absolute frame: chunk completion order is an implementation
-      // detail that must not reach the encoder.
-      const captures = new Map<number, Uint8Array>();
-      let done = 0;
+      const assertNotAborted = (): void => {
+        if (options.signal?.aborted === true) {
+          const aborted = new Error(`Render of "${config.id}" was cancelled`);
+          aborted.name = "AbortError";
+          throw aborted;
+        }
+      };
 
-      await Promise.all(
-        chunkRange(0, total, concurrency).map(async (chunk) => {
+      const encodeOptions = {
+        out: options.out,
+        fps: config.fps,
+        crf: options.crf,
+        codec: options.codec,
+        preset: options.preset,
+      };
+
+      /*
+       * Two capture strategies, chosen by concurrency.
+       *
+       * `concurrency === 1` streams: one page, frames captured and pushed to
+       * FFmpeg in order, so peak memory is one PNG rather than the whole video.
+       * This is the default and the only path that survives a long render.
+       *
+       * Higher concurrency has chunks finishing out of order, so frames must be
+       * reordered before they can be written — that needs the whole set in
+       * memory. Kept deliberately: it is a speed knob, and the memory ceiling is
+       * the price (ponytail: reorder buffer, add when parallel renders matter).
+       */
+      let frameCount: number;
+
+      if (concurrency === 1) {
+        let done = 0;
+
+        async function* sequentialFrames(): AsyncGenerator<Uint8Array> {
           const context = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
 
           try {
@@ -275,41 +308,75 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
             await openComposition(page, server.url, config.id, options.props, readyTimeoutMs);
             checkPageError();
 
-            for (let frame = chunk.start; frame < chunk.end; frame += 1) {
-              captures.set(frame, await captureFrame(page, frame, size, readyTimeoutMs, config.id));
+            for (let frame = 0; frame < total; frame += 1) {
+              assertNotAborted();
+              const png = await captureFrame(page, frame, size, readyTimeoutMs, config.id);
               checkPageError();
               done += 1;
               options.onProgress?.(done, total);
+              yield png;
             }
           } finally {
             await context.close();
           }
-        }),
-      );
+        }
+
+        await encodeWithFFmpeg(sequentialFrames(), encodeOptions);
+        frameCount = total;
+      } else {
+        // Keyed by absolute frame: chunk completion order is an implementation
+        // detail that must not reach the encoder.
+        const captures = new Map<number, Uint8Array>();
+        let done = 0;
+
+        await Promise.all(
+          chunkRange(0, total, concurrency).map(async (chunk) => {
+            const context = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
+
+            try {
+              const page = await context.newPage();
+              attachDiagnostics(page, config.id);
+              await openComposition(page, server.url, config.id, options.props, readyTimeoutMs);
+              checkPageError();
+
+              for (let frame = chunk.start; frame < chunk.end; frame += 1) {
+                assertNotAborted();
+
+                captures.set(
+                  frame,
+                  await captureFrame(page, frame, size, readyTimeoutMs, config.id),
+                );
+                checkPageError();
+                done += 1;
+                options.onProgress?.(done, total);
+              }
+            } finally {
+              await context.close();
+            }
+          }),
+        );
+
+        checkPageError();
+
+        // Rebuilt in ascending order — this is the video.
+        const frames = Array.from({ length: total }, (_, frame) => {
+          const png = captures.get(frame);
+
+          if (png === undefined) {
+            throw new Error(`Frame ${frame} of "${config.id}" was never captured`);
+          }
+
+          return png;
+        });
+
+        await encodeWithFFmpeg(frames, encodeOptions);
+        frameCount = frames.length;
+      }
 
       checkPageError();
 
-      // Rebuilt in ascending order — this is the video.
-      const frames = Array.from({ length: total }, (_, frame) => {
-        const png = captures.get(frame);
-
-        if (png === undefined) {
-          throw new Error(`Frame ${frame} of "${config.id}" was never captured`);
-        }
-
-        return png;
-      });
-
-      await encodeWithFFmpeg(frames, {
-        out: options.out,
-        fps: config.fps,
-        crf: options.crf,
-        codec: options.codec,
-        preset: options.preset,
-      });
-
       return {
-        frameCount: frames.length,
+        frameCount: frameCount,
         fps: config.fps,
         width: config.width,
         height: config.height,

@@ -90,16 +90,23 @@ export const checkFfmpeg = async (): Promise<boolean> => {
 /**
  * Encodes PNG frames into `options.out`.
  *
- * Frames are written in array order, and that order is the video: this function
- * does no sorting, so callers must hand over frames 0..N in sequence.
+ * Frames are written in iteration order, and that order is the video: this
+ * function does no sorting, so callers must hand over frames 0..N in sequence.
+ *
+ * Accepts an array or any (async) iterable. The iterable form is what keeps a
+ * long render flat in memory: frames reach FFmpeg as they are captured instead
+ * of all being held until the last one finishes.
  *
  * @throws When FFmpeg exits non-zero, with the tail of its stderr
  */
 export const encodeWithFFmpeg = async (
-  frames: readonly Uint8Array[],
+  frames: Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
   options: EncodeOptions,
 ): Promise<void> => {
-  if (frames.length === 0) {
+  // An empty array is knowable up front, so fail before spawning FFmpeg. An
+  // iterable only reveals emptiness after iterating, hence the check after the
+  // loop below.
+  if (Array.isArray(frames) && frames.length === 0) {
     throw new Error("encodeWithFFmpeg() needs at least one frame");
   }
 
@@ -114,14 +121,21 @@ export const encodeWithFFmpeg = async (
   // deadlock that looks exactly like a hung render.
   const stderrText = new Response(proc.stderr).text();
 
+  let wrote = 0;
+
   try {
-    for (const frame of frames) {
+    for await (const frame of frames) {
       // Awaited so backpressure is respected: the sink reports a promise when its
       // buffer is full, and ignoring it would queue the whole render in memory.
       await proc.stdin.write(frame);
       // Flush per frame — the sink buffers, and holding a whole render in the sink
       // would defeat streaming.
       await proc.stdin.flush();
+      wrote += 1;
+    }
+
+    if (wrote === 0) {
+      throw new Error("encodeWithFFmpeg() needs at least one frame");
     }
 
     await proc.stdin.end();
