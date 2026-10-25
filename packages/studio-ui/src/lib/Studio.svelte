@@ -49,7 +49,12 @@
     );
     let frame = $state(0);
     let isPlaying = $state(false);
-    let playerRef: PlayerApi | null = $state(null);
+    // `$state<T>()` with no argument gives `T | undefined` without narrowing the
+    // initialiser to `undefined`. Assigning `null` here instead lets TypeScript
+    // control-flow narrow `playerRef` to `null` (the widening assignments all
+    // happen in markup, after this line), so every `?.` below resolves to
+    // `never` and the registry read stops type-checking.
+    let playerRef = $state<PlayerApi>();
 
     const active = $derived(
         compositions.find((composition) => composition.id === activeId),
@@ -116,7 +121,7 @@
     };
 
     const togglePlay = (): void => {
-        if (playerRef === null) return;
+        if (playerRef === undefined) return;
 
         if (isPlaying) {
             playerRef.pause();
