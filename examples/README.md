@@ -1,9 +1,13 @@
 # Examples
 
-Seven compositions that show what the engine does. They are not a separate app: the
-studio owns the render host, so each example is a folder with a Svelte component and an
-`index.ts` that calls `defineComposition`. The studio, the CLI, and the test suite all
-read them from here.
+Seven compositions, in a **normal SvelteKit app**. This is the setup you have after
+`bun add @svelte-motion/core @svelte-motion/studio-ui`: a scaffolded Kit project, Tailwind,
+and a `src/lib/compositions` folder you own.
+
+It is deliberately not special. It installs `@svelte-motion/core` from the package, so it
+resolves through the real `exports` map to `dist` — which means a broken `exports` entry or
+a missing `.d.ts` fails here and nowhere else. `apps/studio` aliases core to source instead,
+so the two apps exercise opposite halves of the package.
 
 | Id              | Frames | Styling  | What it shows                                                                                                |
 | --------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------ |
@@ -15,93 +19,101 @@ read them from here.
 | `quote-series`  | 150    | Tailwind | `Series` stepping through a quote, each item revealing one more line                                         |
 | `loop-ticker`   | 120    | Tailwind | `Loop` driving an endless horizontal ticker with no timer                                                    |
 
-Static files used by the examples live in `apps/studio/static/examples/`.
-
-## Why the folder has its own config
-
-`examples/svelte.config.js` and `examples/tsconfig.json` exist so editors and
-`svelte-check` treat this folder as a Svelte project. Without them, tooling walks up to
-the repo root, finds a `vite.config.ts` with no Svelte plugin, and reports:
+## Layout
 
 ```
-Error: No Svelte configuration found in vite config. Is @sveltejs/vite-plugin-svelte configured?
+src/lib/compositions/<id>/   one folder per example: <Name>.svelte, props.ts, index.ts
+src/routes/+page.svelte      gallery — a card per composition
+src/routes/[id]/+page.svelte one composition in the Studio
+src/routes/render/           /render host the CLI screenshots
+src/routes/player/           /player host the parity gate screenshots
+src/app.css                  Tailwind + the studio theme tokens
+static/examples/             chart-data.json and the gallery SVGs
 ```
 
-## Run the commands from the repo root
+Each `index.ts` calls `defineComposition`, which is all the registry needs. The app globs
+that folder itself (`import.meta.glob("/src/lib/compositions/*/index.ts")`) — `src/routes`
+and the glob are the app's job, which is exactly why `@svelte-motion/studio-ui` is a
+component library and not an app.
 
-Every command below assumes your shell is at the repository root:
+## Commands
+
+Run these from the repository root. The CLI is invoked by path and `--build` is relative to
+where you are.
 
 ```bash
-cd /path/to/svelte-motion
+# Gallery + Studio. Builds core first, because this app uses core's dist.
+bun run dev:examples
+
+# Render one to a file. Same ordering: core, then this app.
+bun run build:examples
+bun packages/cli/src/index.ts render title-card --out out/title-card.mp4 --build examples/build
+
+# List what this app registers
+bun packages/cli/src/index.ts list --build examples/build
+
+# Type-check the app
+bun run check:examples
 ```
 
-Two reasons. The CLI is invoked as `packages/cli/src/index.ts`, and `--build` is relative
-to where you are. Running from inside `examples/` only works with `../` prefixes.
-
-### See them in the studio
+If you change `packages/core`, rebuild it before the app will see the change:
 
 ```bash
-vp run studio#dev
+vp run core#build
 ```
 
-Then open the printed URL, usually `http://localhost:5173`, and pick a composition from
-the sidebar. The preview scales the stage to the panel, so a 1920x1080 composition is
-visible in full without scrolling. The scrubber and timeline work on every example.
-
-Stop the server with `Ctrl+C`.
-
-### Render one to a file
-
-```bash
-vp run studio#build
-bun packages/cli/src/index.ts render title-card --out out/title-card.mp4 --build apps/studio/build
-```
-
-`vp run studio#build` is required first: the renderer serves the built app, not the source.
-Swap `title-card` for any id in the table. Output lands where `--out` says; `out/` is
-gitignored.
-
-### List what is available
-
-```bash
-bun packages/cli/src/index.ts list --build apps/studio/build
-```
+That is the trade you make for testing the published entry points. `apps/studio` avoids it
+by aliasing core to source.
 
 ### Pass props
 
 ```bash
 bun packages/cli/src/index.ts render title-card --out out/card.mp4 \
   --props '{"title":"Release 0.1","subtitle":"What changed"}' \
-  --build apps/studio/build
+  --build examples/build
 ```
 
 `data-chart` declares a valibot schema, so bad values fail before any frame is captured:
 
 ```bash
 bun packages/cli/src/index.ts render data-chart --out out/chart.mp4 \
-  --props '{"heading":""}' --build apps/studio/build
+  --props '{"heading":""}' --build examples/build
 # error: Composition "data-chart" props are invalid: heading: Invalid length: Expected >=1 but received 0
 ```
 
 Examples without a schema accept any JSON object and ignore unknown keys.
 
-### Check the examples
+## Adding an example
 
-```bash
-cd examples && bunx svelte-check --output human
-```
+1. Create `src/lib/compositions/<id>/` with `<Name>.svelte`, `props.ts`, and `index.ts`
+   calling `defineComposition`.
+2. Done. The glob picks it up; there is no registry file to edit.
 
-Use `bunx`, not a bare `svelte-check`: the binary is not installed at this level, and
-`bunx` resolves it from the workspace. This exits with `0 errors and 0 warnings`.
-
-## Rules for new examples
+Rules:
 
 - A frame is a pure function of its number. No `Math.random`, no `Date.now`, no CSS
-  transitions or CSS animations, because those run on wall clock and break renders.
-- Assets go in `apps/studio/static/examples/` and are read through `staticFile`.
-- Async work (fetch, media) is wrapped in `delayRender` / `continueRender`, so the
-  renderer waits for it before the first screenshot.
-- Tailwind examples get their utilities because `apps/studio/src/app.css` contains
-  `@source "../../../examples"`. Add another folder there if you create one elsewhere.
+  transitions or animations — those run on wall clock and break determinism.
+- Assets go in `static/examples/` here and are read through `staticFile("examples/...")`.
+  A static file is served by the app that owns it, so examples used to live in
+  `apps/studio/static/`; they no longer do.
+- Async work (fetch, media) is wrapped in `delayRender` / `continueRender`, so the renderer
+  waits for it before the first screenshot.
+- Tailwind utilities work because `src/app.css` has `@source "../../packages/studio-ui/src"`.
+  If you add markup in another folder outside this app, add its `@source` too.
 - Named prop types live in `props.ts`. `svelte-check` cannot see named exports from a
   `.svelte` file.
+
+## Note on the editor
+
+`svelte` must resolve from this folder. It does: this app is a workspace member with its own
+`node_modules`. If resolution ever breaks, the Svelte VS Code extension falls back to the
+Svelte 4 parser bundled inside `svelte-language-server` and reports nonsense on valid runes
+code:
+
+```
+Expected if, each or await
+```
+
+Nothing here is wrong when that appears — `{#snippet}` is Svelte 5 syntax that parser does
+not know. Check `require.resolve('svelte/compiler', { paths: ['examples'] })` before editing
+any component.

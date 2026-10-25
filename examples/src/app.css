@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind scans from the CSS file's own location, so it never sees the markup of
+ * the shared Studio surfaces. `@source` adds that package explicitly. Both apps
+ * that mount the Studio declare it, which is why the two look identical.
+ */
+@source "../../packages/studio-ui/src";
+
+/*
+ * Screenshot fidelity, same rules as `apps/studio/src/app.css`.
+ *
+ * `/render` and `/player` are captured by a headless browser, so the page has no
+ * chrome: no body margin, no scrollbars, no background bleed. The gallery scrolls
+ * inside its own `h-screen overflow-y-auto` container instead.
+ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+@theme {
+  --color-studio: #0b1020;
+  --color-panel: #111827;
+  --color-ink: #e2e8f0;
+  --color-muted: #94a3b8;
+  --color-accent: #38bdf8;
+  --color-line: #1f2937;
+}
+
+@layer base {
+  /*
+   * Pixel-gate restore. Preflight sets `html { line-height: 1.5 }`; the render
+   * and player hosts were drawn under the UA default (`normal`). Compositions
+   * inherit line-height into their title nodes, so without this the captured
+   * frame PNGs shift.
+   */
+  html {
+    line-height: normal;
+  }
+}

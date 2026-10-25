@@ -1,14 +1,7 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "$app/tsconfig",
   "compilerOptions": {
-    "target": "esnext",
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-    "resolveJsonModule": true,
-    "strict": true,
-    "noEmit": true
+    "strict": true
   },
-  "include": ["./**/*.ts", "./**/*.svelte"]
+  "include": ["src", "vite.config.ts"]
 }
