@@ -114,9 +114,15 @@ See `plan/architecture.md` for the full component table, interfaces, and failure
   and globs. See `plan/decisions.md`.
 - **D17** `examples/` is a scaffolded SvelteKit app (`sv create --template minimal`), not a folder of
   loose components. It consumes `@svelte-motion/core` from `dist` on purpose.
+- **D18** OpenTUI (`@opentui/core`) for the CLI TUI: full interactive mode, one-shot commands kept,
+  bin renamed `cli` → `svelte-motion`. Spiked and verified under Bun 1.4.4. See `plan/decisions.md`.
+- **D19** Studio stays CLI-only for rendering this round; the browser/Node boundary stays unpierced.
+- **D20** Audio deferred; `interpolate` output options and streaming encode ship as M9.
+- **D21** Subagent model: DeepSeek V4.1 Flash primary, Muse Spark 1.3 Contributor fallback
+  (Michael's call 2026-10-25, overrides ZenPick's Muse advantage).
 
-Open questions live in `plan/decisions.md`: Studio timeline scope, system FFmpeg vs shipped binaries, Zod acceptance.
-SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path.
+Open questions live in `plan/decisions.md`: system FFmpeg vs shipped binaries, Zod acceptance.
+SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path. Studio scope is settled (D18, M8).
 
 ## Rendering pipeline (determinism is the gate)
 
@@ -159,6 +165,9 @@ See `plan/svelte-mapping.md` for the full table and snippet examples.
 | M4        | Player               | `Player` plays at `fps` with scrubber, preview matches renderer PNG                                          | done        |
 | M5        | Studio               | Composition picker, preview, scrubber, duration timeline bar (nested Sequence bars need a timeline registry) | mostly done |
 | M6        | Polish, docs, skills | Docs, Valibot props, CLI help, tests pass (agent skills not written yet)                                     | mostly done |
+| M7        | CLI TUI              | Interactive OpenTUI mode renders with live progress at any width; one-shot commands unchanged (see D18)      | done        |
+| M8        | Studio proper        | Timeline registry drives nested Sequence bars, props editor, shortcuts, lucide icons (see D19)               | done        |
+| M9        | Debts and cleanup    | `interpolate` output options fixed, streaming encode, agent skills, docs swept (see D20)                     | mostly done |
 
 See `plan/milestones.md` for commands and done-when checklists.
 
