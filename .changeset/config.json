@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.0.3/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [["@svelte-motion/core", "@svelte-motion/renderer", "@svelte-motion/cli"]],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [
+    "@svelte-motion/studio-ui",
+    "@svelte-motion/studio",
+    "@svelte-motion/web",
+    "@svelte-motion/examples"
+  ]
+}

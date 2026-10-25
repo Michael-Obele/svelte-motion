@@ -85,17 +85,44 @@ The second command should show `@svelte-motion/renderer` at the published versio
 
 ## Versioning
 
-All three move together on the same version, and `cli` pins `renderer` exactly, so bump all
-three before tagging:
+Versions are driven by [changesets](https://github.com/changesets/changesets), configured in
+`.changeset/config.json`. The three published packages are in a `fixed` group, so they always
+share one version — `cli` pins `renderer` exactly, so versioning them apart would ship a `cli`
+pointing at a `renderer` that does not exist yet.
+
+### Every PR that changes a published package
 
 ```bash
-cd packages/core     && bunx bumpp --no-tag
-cd ../renderer       && bunx bumpp --no-tag
-cd ../cli            && bunx bumpp --no-tag
+bun changeset
 ```
 
-The CI workflow publishes whatever version each `package.json` declares. A version that is
-already on the registry will fail the job, so the bump is not optional.
+Pick the bump type (`patch` / `minor` / `major`) and write one plain sentence about what
+changed. Selecting any one of the three bumps all three, because of the `fixed` group. Commit
+the generated `.changeset/*.md` with the change itself.
+
+`.github/workflows/ci.yml` runs `changeset status` on every pull request, so a package change
+with no changeset fails CI.
+
+### Cutting the release
+
+```bash
+bun run version-packages        # applies pending changesets: versions + CHANGELOG.md
+git add -A && git commit -m "chore(release): version packages"
+git push
+gh release create v0.2.0 --generate-notes   # triggers publish.yml
+```
+
+`changeset version` leaves `"workspace:*"` untouched in `cli`, which is what we want: pnpm
+rewrites it to the real version when it packs the tarball.
+
+The CI workflow publishes whatever version each `package.json` declares. A version already on
+the registry fails the job, so the bump is not optional.
+
+### Not commit-message driven
+
+Nothing parses commit text. A `fix:` commit does not bump anything on its own — the changeset
+file is the signal. With three packages locked to one version, an explicit record of intent
+beats inferring from commit subjects.
 
 ## Tags
 

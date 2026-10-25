@@ -1,0 +1,45 @@
+# Continuous integration.
+#
+# Mirrors what `bun run ready` does locally, plus one release-specific check: a pull
+# request that changes a published package must include a changeset. That is what makes
+# `.changeset/config.json` more than decoration — without it, a version bump can be
+# forgotten silently and the next release publishes the wrong number.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # `changeset status --since` diffs against the base branch, so the full
+          # history has to be present.
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - run: bun install --frozen-lockfile
+
+      # `vp` resolves from the workspace root's node_modules/.bin.
+      - run: ./node_modules/.bin/vp check
+      - run: ./node_modules/.bin/vp run -r build
+      - run: ./node_modules/.bin/vp run -r test
+
+      - name: Require a changeset for published packages
+        if: github.event_name == 'pull_request'
+        run: ./node_modules/.bin/changeset status --since=origin/${{ github.base_ref }}

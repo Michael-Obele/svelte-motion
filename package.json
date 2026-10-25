@@ -17,6 +17,8 @@
     "dev:examples": "vp run core#build && vp run examples#dev",
     "build:examples": "vp run -t examples#build",
     "check:examples": "vp run examples#check",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
     "spike": "vp run studio#build && bun run tools/spike/determinism.ts",
     "render-demo": "bun run tools/spike/render-demo.ts",
     "test:e2e": "vp run renderer#test:e2e",
@@ -25,6 +27,7 @@
     "verify:player": "vp run studio#build && bun run tools/spike/verify-player-parity.ts"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "svelte": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"
