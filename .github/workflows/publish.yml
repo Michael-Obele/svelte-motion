@@ -63,8 +63,19 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # FFmpeg is a hard requirement: `packages/renderer/tests/renderer.test.ts`
+      # asserts it is on PATH, and the renderer shells out to it for real encodes.
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -1
+
       # `vp` resolves from the workspace root's node_modules/.bin.
+      # Build first: core is consumed from `dist`, so its types must exist before
+      # anything type-checks against them.
       - run: ./node_modules/.bin/vp run -r build
+      - run: ./node_modules/.bin/vp check
       - run: ./node_modules/.bin/vp run -r test
 
       # Order is forced by the dependency graph: `cli` depends on `renderer`, so

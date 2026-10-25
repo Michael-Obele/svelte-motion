@@ -10,7 +10,7 @@
   ],
   "type": "module",
   "scripts": {
-    "ready": "vp check && vp run -r test && vp run -r build",
+    "ready": "vp run -r build && vp check && vp run -r test && bun run tools/spike/verify-determinism.ts",
     "dev": "vp run core#build && vp run examples#dev",
     "dev:studio": "vp run studio#dev",
     "dev:web": "vp run web#dev",

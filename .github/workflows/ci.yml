@@ -35,9 +35,19 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # `vp` resolves from the workspace root's node_modules/.bin.
-      - run: ./node_modules/.bin/vp check
+      # FFmpeg is a hard requirement, not an optional extra:
+      # `packages/renderer/tests/renderer.test.ts` asserts it is on PATH.
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -1
+
+      # Build BEFORE check. `@svelte-motion/core` is consumed from `dist`, so its
+      # type declarations do not exist until it has been built; checking first
+      # fails on any fresh checkout with TS2307 across every core import.
       - run: ./node_modules/.bin/vp run -r build
+      - run: ./node_modules/.bin/vp check
       - run: ./node_modules/.bin/vp run -r test
 
       - name: Require a changeset for published packages
