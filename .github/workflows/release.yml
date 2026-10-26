@@ -54,11 +54,17 @@ jobs:
       - uses: changesets/action@v2
         with:
           # Commit messages decide the bump, so no hand-written changeset is
-          # needed: `changeset:auto` writes one from the commits since the last
+          # needed: `version-packages` writes one from the commits since the last
           # tag (default minor, major on a breaking marker, patch when nothing
-          # shippable changed) and no-ops if a changeset already exists. Then the
-          # normal version step applies it and writes the changelogs.
-          version-script: bun run changeset:auto && ./node_modules/.bin/changeset version
+          # shippable changed, no-op if a changeset already exists) and then
+          # applies it.
+          #
+          # The chain lives in the package.json script, not here: Bun treats
+          # everything after `bun run <script>` as arguments, so an inline
+          # `bun run changeset:auto && changeset version` runs only the first
+          # command and passes `&& changeset version` as argv. That produced an
+          # empty Version Packages pull request before this was fixed.
+          version-script: bun run version-packages
           # Runs only once no changesets remain. Tags what was just merged;
           # `publish.yml` owns the npm publish, so this must not publish.
           publish-script: ./node_modules/.bin/changeset git-tag
