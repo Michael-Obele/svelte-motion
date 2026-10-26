@@ -57,21 +57,25 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # Generate the changeset BEFORE the action inspects `.changeset/`.
+      #
+      # changesets/action decides between "open a version PR" and "publish" by
+      # looking for pending changesets first. With none, it takes the publish
+      # path and never runs `version-script` — so a generator placed inside
+      # version-script can never fire, because the thing it generates is the
+      # precondition for running it. That is why nothing bumped after the 0.2.0
+      # merge: the log said "No changesets found" and skipped straight to
+      # `changeset git-tag`.
+      - run: bun run changeset:auto
+
       - id: changesets
         uses: changesets/action@v2
         with:
-          # Commit messages decide the bump, so no hand-written changeset is
-          # needed: `version-packages` writes one from the commits since the last
-          # tag (default minor, major on a breaking marker, patch when nothing
-          # shippable changed, no-op if a changeset already exists) and then
-          # applies it.
-          #
-          # The chain lives in the package.json script, not here: Bun treats
-          # everything after `bun run <script>` as arguments, so an inline
-          # `bun run changeset:auto && changeset version` runs only the first
-          # command and passes `&& changeset version` as argv. That produced an
-          # empty Version Packages pull request before this was fixed.
-          version-script: bun run version-packages
+          # No hand-written changeset is needed: the step above wrote one from
+          # the commits since the last tag (default minor, major on a breaking
+          # marker, patch when nothing shippable changed, no-op if a changeset
+          # already exists). This step only applies it.
+          version-script: ./node_modules/.bin/changeset version
           # Runs only once no changesets remain. Tags what was just merged;
           # `publish.yml` owns the npm publish, so this must not publish.
           publish-script: ./node_modules/.bin/changeset git-tag
