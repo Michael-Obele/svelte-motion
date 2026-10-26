@@ -33,6 +33,15 @@ jobs:
         with:
           bun-version: "1.4.4"
 
+      # Node is pinned, not inherited. `vp` needs `node:util.styleText`, which
+      # does not exist before Node 20.12 — on a runner image still shipping Node
+      # 18 the build dies with "does not provide an export named 'styleText'".
+      # Leaving this to the runner default means CI passes or fails depending on
+      # when GitHub rolls the image; publish.yml already pins the same version.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
       - run: bun install --frozen-lockfile
 
       # FFmpeg is a hard requirement, not an optional extra:
