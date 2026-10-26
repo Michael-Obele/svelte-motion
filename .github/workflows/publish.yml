@@ -25,6 +25,12 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+  # Called by release.yml. The `release: published` trigger above cannot do this
+  # job on its own: changesets creates the releases with GITHUB_TOKEN, and GitHub
+  # does not run workflows for events caused by GITHUB_TOKEN ("events triggered
+  # by the GITHUB_TOKEN will not create a new workflow run"). The first release
+  # tagged 0.2.0 and then published nothing until this call was added.
+  workflow_call:
 
 # `id-token: write` is the only credential. It lets GitHub mint the OIDC token that
 # npm exchanges for a publish credential.

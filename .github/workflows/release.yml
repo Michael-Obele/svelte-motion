@@ -38,10 +38,16 @@ permissions:
   contents: write
   # Write, to open and update the version pull request.
   pull-requests: write
+  # Needed by the called publish workflow, which mints an OIDC token for npm's
+  # trusted publishing. A reusable workflow cannot hold more than its caller.
+  id-token: write
 
 jobs:
   version:
     runs-on: ubuntu-latest
+    outputs:
+      # "true" once this run tagged a release, which is when npm should publish.
+      published: ${{ steps.changesets.outputs.published }}
     steps:
       - uses: actions/checkout@v7
 
@@ -51,7 +57,8 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - uses: changesets/action@v2
+      - id: changesets
+        uses: changesets/action@v2
         with:
           # Commit messages decide the bump, so no hand-written changeset is
           # needed: `version-packages` writes one from the commits since the last
@@ -70,10 +77,24 @@ jobs:
           publish-script: ./node_modules/.bin/changeset git-tag
           commit-message: "chore(release): version packages"
           pr-title: "chore(release): version packages"
-          # Tags -> GitHub releases -> `release: published` -> publish.yml.
+          # Tags, and creates the GitHub releases for them.
           create-github-releases: "true"
           push-git-tags: "true"
           # The GitHub API attributes the commit to the token owner (Michael)
           # and signs it with GitHub's key. The Git CLI would commit as whatever
           # `user.name` CI defaults to, which is nobody.
           push-with-git-cli: "false"
+
+  # Publishing is a called job, not a reaction to the release event. Events
+  # caused by GITHUB_TOKEN do not start workflows, so a `release: published`
+  # trigger silently published nothing for the 0.2.0 release; the publish
+  # workflow was only ever run by hand. Calling it here removes the event from
+  # the path entirely.
+  publish:
+    needs: version
+    if: needs.version.outputs.published == 'true'
+    uses: ./.github/workflows/publish.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
