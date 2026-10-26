@@ -1,5 +1,11 @@
 # @svelte-motion/cli
 
+[![npm](https://img.shields.io/npm/v/@svelte-motion/cli?style=flat-square&color=6366f1)](https://www.npmjs.com/package/@svelte-motion/cli)
+[![CI](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml/badge.svg?branch=main&style=flat-square)](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Bun](https://img.shields.io/badge/requires-Bun%201.3%2B-000000?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
+[![FFmpeg](https://img.shields.io/badge/requires-FFmpeg%20on%20PATH-007808?style=flat-square&logo=ffmpeg&logoColor=white)](#)
+
 Command line interface for rendering Svelte compositions to video.
 
 ## Install

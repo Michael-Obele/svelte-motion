@@ -1,5 +1,10 @@
 # @svelte-motion/core
 
+[![npm](https://img.shields.io/npm/v/@svelte-motion/core?style=flat-square&color=6366f1)](https://www.npmjs.com/package/@svelte-motion/core)
+[![CI](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml/badge.svg?branch=main&style=flat-square)](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=flat-square&logo=svelte&logoColor=white)](https://svelte.dev)
+
 Remotion-style video primitives for Svelte 5. Frame is state.
 
 ## Install

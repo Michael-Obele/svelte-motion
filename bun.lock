@@ -6,6 +6,7 @@
       "name": "svelte-motion",
       "devDependencies": {
         "@changesets/cli": "^3.0.3",
+        "@types/bun": "^1.4.4",
         "svelte": "catalog:",
         "vite": "catalog:",
         "vite-plus": "catalog:",

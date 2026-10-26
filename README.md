@@ -8,6 +8,10 @@
 [![Vite+](https://img.shields.io/badge/Vite%2B-1.4-646CFF?style=flat-square&logo=vite&logoColor=white)](https://viteplus.dev)
 [![Bun](https://img.shields.io/badge/Bun-1.4.4-%23000000.svg?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![CI](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml/badge.svg?branch=main&style=flat-square)](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml)
+[![core](https://img.shields.io/npm/v/@svelte-motion/core?style=flat-square&label=core&color=6366f1)](https://www.npmjs.com/package/@svelte-motion/core)
+[![renderer](https://img.shields.io/npm/v/@svelte-motion/renderer?style=flat-square&label=renderer&color=6366f1)](https://www.npmjs.com/package/@svelte-motion/renderer)
+[![cli](https://img.shields.io/npm/v/@svelte-motion/cli?style=flat-square&label=cli&color=6366f1)](https://www.npmjs.com/package/@svelte-motion/cli)
 [![GitHub Stars](https://img.shields.io/github/stars/Michael-Obele/svelte-motion?style=social)](https://github.com/Michael-Obele/svelte-motion)
 
 Make videos programmatically with Svelte 5. Remotion's pipeline, no React.
@@ -34,7 +38,7 @@ svelte-motion keeps the pipeline and swaps the authoring layer to Svelte 5 runes
 
 ## Status
 
-Working at version 0.1, not yet published to npm. Every workspace member builds, and the gates below run in this repo.
+Published to npm as three packages: `@svelte-motion/core`, `@svelte-motion/renderer` and `@svelte-motion/cli`. Every workspace member builds, and the gates below run in this repo.
 
 What works today:
 

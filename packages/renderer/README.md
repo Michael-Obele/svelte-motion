@@ -1,5 +1,11 @@
 # @svelte-motion/renderer
 
+[![npm](https://img.shields.io/npm/v/@svelte-motion/renderer?style=flat-square&color=6366f1)](https://www.npmjs.com/package/@svelte-motion/renderer)
+[![CI](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml/badge.svg?branch=main&style=flat-square)](https://github.com/Michael-Obele/svelte-motion/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Node only](https://img.shields.io/badge/runtime-Node%20only-339933?style=flat-square&logo=nodedotjs&logoColor=white)](#)
+[![FFmpeg](https://img.shields.io/badge/requires-FFmpeg%20on%20PATH-007808?style=flat-square&logo=ffmpeg&logoColor=white)](#)
+
 Node-only engine that turns a built Studio into an MP4. Serves the build, drives headless Chromium, screenshots each frame, and pipes PNGs to FFmpeg.
 
 Browser code lives in `@svelte-motion/core`. This package must never be imported in a browser bundle.
