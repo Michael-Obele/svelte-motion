@@ -1,6 +1,6 @@
 {
   "name": "@svelte-motion/renderer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Render Svelte compositions to video: headless Chromium frame capture piped to FFmpeg.",
   "homepage": "https://github.com/Michael-Obele/svelte-motion#readme",
   "bugs": {
