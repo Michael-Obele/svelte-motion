@@ -146,6 +146,14 @@
         "svelte": "^5.0.0",
       },
     },
+    "tools/release": {
+      "name": "@svelte-motion/release",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "^1.4.4",
+        "typescript": "^6.0.3",
+      },
+    },
     "tools/spike": {
       "name": "@svelte-motion/spike",
       "version": "0.0.0",
@@ -377,6 +385,8 @@
     "@svelte-motion/core": ["@svelte-motion/core@workspace:packages/core"],
 
     "@svelte-motion/examples": ["@svelte-motion/examples@workspace:examples"],
+
+    "@svelte-motion/release": ["@svelte-motion/release@workspace:tools/release"],
 
     "@svelte-motion/renderer": ["@svelte-motion/renderer@workspace:packages/renderer"],
 

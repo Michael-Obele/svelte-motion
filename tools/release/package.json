@@ -1,0 +1,15 @@
+{
+  "name": "@svelte-motion/release",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "auto": "bun run version-from-commits.ts",
+    "test": "bun test",
+    "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^6.0.3"
+  }
+}

@@ -18,6 +18,7 @@
     "build:examples": "vp run -t examples#build",
     "check:examples": "vp run examples#check",
     "changeset": "changeset",
+    "changeset:auto": "bun run tools/release/version-from-commits.ts",
     "check": "vp check && vp run -r check",
     "version-packages": "changeset version",
     "spike": "vp run studio#build && bun run tools/spike/determinism.ts",

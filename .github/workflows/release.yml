@@ -53,8 +53,12 @@ jobs:
 
       - uses: changesets/action@v2
         with:
-          # Bumps versions + changelogs and deletes the applied changeset files.
-          version-script: ./node_modules/.bin/changeset version
+          # Commit messages decide the bump, so no hand-written changeset is
+          # needed: `changeset:auto` writes one from the commits since the last
+          # tag (default minor, major on a breaking marker, patch when nothing
+          # shippable changed) and no-ops if a changeset already exists. Then the
+          # normal version step applies it and writes the changelogs.
+          version-script: bun run changeset:auto && ./node_modules/.bin/changeset version
           # Runs only once no changesets remain. Tags what was just merged;
           # `publish.yml` owns the npm publish, so this must not publish.
           publish-script: ./node_modules/.bin/changeset git-tag
