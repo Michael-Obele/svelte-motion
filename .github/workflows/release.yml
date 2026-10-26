@@ -74,8 +74,14 @@ jobs:
           # No hand-written changeset is needed: the step above wrote one from
           # the commits since the last tag (default minor, major on a breaking
           # marker, patch when nothing shippable changed, no-op if a changeset
-          # already exists). This step only applies it.
-          version-script: ./node_modules/.bin/changeset version
+          # already exists or HEAD is a release commit).
+          #
+          # `vp fmt` runs after `changeset version` because the changelogs it
+          # generates are not formatted, which failed `bun run check` on every
+          # release merge. The chain stays inside the package script: Bun treats
+          # everything after `bun run <script>` as arguments, so an inline
+          # `&&` here would be passed to the first command as argv.
+          version-script: bun run version-packages
           # Runs only once no changesets remain. Tags what was just merged;
           # `publish.yml` owns the npm publish, so this must not publish.
           publish-script: ./node_modules/.bin/changeset git-tag

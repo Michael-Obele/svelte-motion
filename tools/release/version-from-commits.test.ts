@@ -1,5 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { computeBump, levelFor } from "./version-from-commits.ts";
+import { computeBump, isReleaseCommit, levelFor } from "./version-from-commits.ts";
+
+describe("isReleaseCommit", () => {
+  test("a merged version pull request is a release commit", () => {
+    expect(isReleaseCommit("Merge pull request #3 from Michael-Obele/changeset-release/main")).toBe(
+      true,
+    );
+  });
+
+  test("the action's own version commit is a release commit", () => {
+    expect(isReleaseCommit("chore(release): version packages")).toBe(true);
+  });
+
+  test("real work is not a release commit", () => {
+    expect(isReleaseCommit("feat(core): add thing")).toBe(false);
+    expect(isReleaseCommit("docs: readme")).toBe(false);
+    // A merge of ordinary work must still bump.
+    expect(isReleaseCommit("Merge pull request #9 from someone/feature-branch")).toBe(false);
+  });
+});
 
 describe("levelFor", () => {
   test("any ordinary commit is a minor", () => {

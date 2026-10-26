@@ -20,7 +20,7 @@
     "changeset": "changeset",
     "changeset:auto": "bun run tools/release/version-from-commits.ts",
     "check": "vp check && vp run -r check",
-    "version-packages": "bun run changeset:auto && changeset version",
+    "version-packages": "changeset version && vp fmt",
     "spike": "vp run studio#build && bun run tools/spike/determinism.ts",
     "render-demo": "bun run tools/spike/render-demo.ts",
     "test:e2e": "vp run renderer#test:e2e",

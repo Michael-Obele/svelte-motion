@@ -17,11 +17,32 @@
  *
  * A changeset written by hand always wins: if any changeset already exists this
  * script does nothing. It is a floor, not a competitor.
+ *
+ * It also refuses to run on a release commit. Changesets tags a release only
+ * when no changeset is pending, so a generator that counts the release merge as
+ * fresh work keeps the repository permanently "unreleased": every merge opened
+ * another version pull request (0.2.0 → 0.3.0 → 0.4.0 with no tags past 0.2.0)
+ * and the publish path was never reached.
  */
 
 import { resolve } from "node:path";
 
 export type BumpLevel = "major" | "minor" | "patch";
+
+/**
+ * Commit subjects that mean "this push *is* a release".
+ *
+ * `changesets/action` commits `chore(release): version packages`; a human
+ * merging the version pull request produces a merge commit naming the branch.
+ * Neither is work that deserves a bump.
+ */
+const RELEASE_COMMITS = [
+  /^Merge pull request #\d+ from .*changeset-release\//,
+  /^chore\(release\): version packages$/,
+];
+
+export const isReleaseCommit = (subject: string): boolean =>
+  RELEASE_COMMITS.some((pattern) => pattern.test(subject.trim()));
 
 /** Highest wins. Order matters: the first rule a message matches decides it. */
 export const BUMP_RULES: ReadonlyArray<{
@@ -118,6 +139,18 @@ const lastTag = (): string => {
 const main = async (): Promise<number> => {
   const root = resolve(import.meta.dir, "../..");
   const changesetDir = resolve(root, ".changeset");
+
+  // A release push must reach the action with an EMPTY `.changeset/`, because
+  // that is the only branch on which changesets tags and publishes. Writing one
+  // here would ask for another bump instead and the release would never happen.
+  const headSubject = git(["log", "-1", "--pretty=%s"]).trim();
+
+  if (isReleaseCommit(headSubject)) {
+    console.log(
+      `changeset:auto: HEAD is a release commit ("${headSubject}") — leaving .changeset empty so the release can tag and publish.`,
+    );
+    return 0;
+  }
 
   const pending = Array.from(
     new Bun.Glob("*.md").scanSync({ cwd: changesetDir, absolute: true }),
