@@ -15,5 +15,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["version-from-commits.ts", "version-from-commits.test.ts"]
+  "include": ["*.ts"]
 }
