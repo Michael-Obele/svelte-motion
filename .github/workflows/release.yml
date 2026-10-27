@@ -100,11 +100,25 @@ jobs:
   # trigger silently published nothing for the 0.2.0 release; the publish
   # workflow was only ever run by hand. Calling it here removes the event from
   # the path entirely.
+  # Publishing is started from here, not reacted to. Events caused by
+  # GITHUB_TOKEN do not start workflows, so the `release: published` trigger
+  # silently published nothing for the 0.2.0 release.
+  #
+  # It DISPATCHES publish.yml rather than calling it with `uses:`. npm's trusted
+  # publisher is bound to the workflow filename, and a called workflow reports
+  # the caller (`release.yml`) as the OIDC `workflow_ref`, so the token exchange
+  # failed with a 404 and the publish was skipped. A dispatched run is a real run
+  # of publish.yml, which is the identity npm expects.
   publish:
     needs: version
     if: needs.version.outputs.published == 'true'
-    uses: ./.github/workflows/publish.yml
+    runs-on: ubuntu-latest
     permissions:
+      # Dispatch is an API call against Actions, so it needs write access here.
+      actions: write
       contents: read
-      id-token: write
-    secrets: inherit
+    steps:
+      - name: Start the publish workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run publish.yml --ref "${{ github.ref_name }}"
