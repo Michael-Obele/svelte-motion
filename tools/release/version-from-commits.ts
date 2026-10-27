@@ -7,13 +7,18 @@
  * lands as a conventional commit — the changeset becomes a second, forgotten
  * description of the same diff.
  *
- * So: **any commit bumps `minor`**, and only specific messages override that.
- * `major` needs a breaking marker, and a range that touched nothing a consumer
- * runs (docs, chore, ci, test, style) drops to `patch`.
+ * Rules, highest level across the range wins, first match wins per commit:
  *
- * The rules live in `BUMP_RULES` below, in priority order, first match wins per
- * commit and the highest level across all commits wins. Edit that table, not the
- * logic.
+ * - `major` — a breaking marker (`type!:`, or a BREAKING CHANGE footer).
+ * - `patch` — `fix`, `perf`, `refactor`, `revert`, and the types that ship
+ *   nothing a consumer runs (`docs`, `chore`, `ci`, `test`, `style`, `build`).
+ *   A fix is not a feature; calling it one inflated 0.4.1 to 0.5.0 off a single
+ *   CI-only commit.
+ * - `minor` — `feat`, and any commit without a recognisable type. Features move
+ *   the version; everything else has to earn it.
+ *
+ * The rules live in `BUMP_RULES` below, in priority order. Edit that table, not
+ * the logic.
  *
  * A changeset written by hand always wins: if any changeset already exists this
  * script does nothing. It is a floor, not a competitor.
@@ -58,13 +63,15 @@ export const BUMP_RULES: ReadonlyArray<{
   },
   {
     level: "patch",
-    reason: "no shipped behaviour",
-    // Only these types, so the range has to be all of them to stay a patch.
-    test: (message) => /^(docs|chore|ci|test|style|build)(\([^)]+\))?:/.test(message),
+    reason: "fix or no shipped behaviour",
+    // Fixes and internal changes are patches. The second group ships nothing a
+    // consumer runs, so a range made only of them stays a patch too.
+    test: (message) =>
+      /^(fix|perf|refactor|revert|docs|chore|ci|test|style|build)(\([^)]+\))?:/.test(message),
   },
   {
     level: "minor",
-    reason: "default for any change",
+    reason: "feature or untyped change",
     test: () => true,
   },
 ];

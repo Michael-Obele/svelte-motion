@@ -21,10 +21,17 @@ describe("isReleaseCommit", () => {
 });
 
 describe("levelFor", () => {
-  test("any ordinary commit is a minor", () => {
+  test("a feature is a minor", () => {
     expect(levelFor("feat(core): add thing").level).toBe("minor");
-    expect(levelFor("fix: repair thing").level).toBe("minor");
     expect(levelFor("random words with no type").level).toBe("minor");
+  });
+
+  test("a fix is a patch, not a feature", () => {
+    expect(levelFor("fix: repair thing").level).toBe("patch");
+    expect(levelFor("fix(release): dispatch publish").level).toBe("patch");
+    expect(levelFor("perf(renderer): faster encode").level).toBe("patch");
+    expect(levelFor("refactor(core): tidy").level).toBe("patch");
+    expect(levelFor("revert: undo thing").level).toBe("patch");
   });
 
   test("breaking markers are major", () => {
