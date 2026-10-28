@@ -1,10 +1,9 @@
 /**
  * Cubic bezier easing curve.
  *
- * Ported from Remotion 4.0.538 (`packages/core/src/bezier.ts`), which is itself a
- * port of React Native's `Libraries/Animated/src/bezier.js`. The constants and the
- * iteration counts are copied verbatim on purpose: changing them changes the
- * output, and the M1 gate is bit-identical output against Remotion.
+ * Solves a CSS `cubic-bezier(x1, y1, x2, y2)` timing function by Newton-Raphson
+ * iteration with a subdivision fallback. The constants and iteration counts are
+ * load-bearing: changing them changes the output curve.
  */
 
 const NEWTON_ITERATIONS = 4;

@@ -1,10 +1,9 @@
 /**
  * Named easing curves.
  *
- * Ported from Remotion 4.0.538 (`packages/core/src/easing.ts`), itself a port of
- * React Native's `Easing.js`. Behaviour is intentionally identical, including the
- * `clampUnit` guards that keep curves defined on [0, 1] from returning NaN when
- * `extrapolate: "extend"` feeds them values outside the segment.
+ * The standard set of CSS and spring easings. The `clampUnit` guards keep curves
+ * defined on [0, 1] from returning NaN when `extrapolate: "extend"` feeds them
+ * values outside the segment.
  */
 
 import { bezier } from "./bezier.js";

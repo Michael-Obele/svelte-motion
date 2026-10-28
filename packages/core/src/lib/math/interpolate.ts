@@ -1,26 +1,24 @@
 /**
  * Range mapping.
  *
- * Ported from Remotion 4.0.538 (`packages/core/src/interpolate.ts`), which is
- * itself a port of React Native's `AnimatedInterpolation`. The numeric path is
- * copied line for line because the M1 gate compares output against Remotion.
+ * Maps an input value across a numeric or string output range, with per-segment
+ * easing, extrapolation control, and posterize. Pure function of its inputs.
  *
- * What this file deliberately does NOT port from upstream, because nothing in
- * v1 uses it: the `outputType` / `output` CSS sugar (`font-weight`,
- * `transform-origin`, axis rotations, `perceptual-scale`). Neither key is in
- * `InterpolateOptions`, and passing either one throws from
+ * Supported in v1: numeric and numeric-string output ranges. The CSS output
+ * sugar (`font-weight`, `transform-origin`, axis rotations, `perceptual-scale`)
+ * is not part of `InterpolateOptions`; passing either key throws from
  * `assertNoUnsupportedOutputOptions` rather than being silently ignored.
  *
  * `easing` is validated when given as an array: a non-function entry throws,
- * naming the index, as it does in Remotion.
+ * naming the index.
  */
 
 export type ExtrapolateType = "extend" | "identity" | "clamp" | "wrap";
 
 /**
- * An easing function. `svelteMotionShouldExtendRight` mirrors Remotion's marker:
- * when a spring-style easing sets it, clamping the right edge would freeze the
- * curve mid-flight, so the segment is extended instead.
+ * An easing function. `svelteMotionShouldExtendRight` marks a spring-style easing:
+ * when set, clamping the right edge would freeze the curve mid-flight, so the
+ * segment is extended instead.
  */
 export type EasingFunction = ((input: number) => number) & {
   readonly svelteMotionShouldExtendRight?: boolean;
@@ -454,8 +452,7 @@ const assertValidEasing = (
     );
   }
 
-  // Cheap to check, and a non-function entry silently yields NaN downstream —
-  // Remotion throws here too.
+  // Cheap to check, and a non-function entry silently yields NaN downstream.
   for (const [index, entry] of easing.entries()) {
     if (typeof entry !== "function") {
       throw new Error(`easing[${index}] must be a function, but got ${typeof entry}`);
@@ -464,7 +461,7 @@ const assertValidEasing = (
 };
 
 /**
- * The CSS output sugar Remotion accepts and this port does not.
+ * The CSS output sugar accepted elsewhere but not implemented here.
  *
  * Keeping the keys out of `InterpolateOptions` makes TypeScript catch them, but
  * a JavaScript caller would have them dropped on the floor:

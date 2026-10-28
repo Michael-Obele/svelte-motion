@@ -1,12 +1,9 @@
 /**
  * Colour range mapping.
  *
- * Ported from Remotion 4.0.538 (`packages/core/src/interpolate-colors.ts`), which
- * came from react-native-reanimated's `Colors.ts`.
- *
  * Supported in v1: hex 3/4/6/8, `rgb()`, `rgba()`, `hsl()`, `hsla()`, and the CSS
  * named colours. Modern CSS Color 4 spaces (`oklch`, `oklab`, `lab`, `lch`,
- * `hwb`) are not ported yet; they throw a clear error rather than guessing.
+ * `hwb`) are not supported yet; they throw a clear error rather than guessing.
  */
 
 import { interpolate, type InterpolateOptions } from "./interpolate.js";

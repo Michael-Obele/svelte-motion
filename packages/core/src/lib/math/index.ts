@@ -1,8 +1,8 @@
 /**
  * Pure math helpers. No Svelte, no DOM, no runes — safe to import anywhere.
  *
- * These produce the same numbers as Remotion 4.0.538 for the same inputs. The
- * parity tests in `tests/math.test.ts` pin that down.
+ * Deterministic: the same inputs always produce the same outputs. The tests in
+ * `tests/math.test.ts` pin that down.
  */
 
 export { bezier } from "./bezier.js";

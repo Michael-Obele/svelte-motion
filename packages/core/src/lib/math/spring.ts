@@ -1,12 +1,10 @@
 /**
  * Spring physics.
  *
- * Ported from Remotion 4.0.538 (`packages/core/src/spring/spring-utils.ts`,
- * `spring/index.ts`, `spring/measure-spring.ts`). The simulation is a
- * semi-analytic damped harmonic oscillator advanced once per frame. The frame
- * loop, the 64 ms delta cap, and the memo caches are load-bearing for parity:
- * spring() is path dependent, so the same animation evaluated in a different
- * order gives different numbers.
+ * A semi-analytic damped harmonic oscillator advanced once per frame. The frame
+ * loop, the 64 ms delta cap, and the memo caches are load-bearing: spring() is
+ * path dependent, so the same animation evaluated in a different order gives
+ * different numbers.
  */
 
 import { interpolate } from "./interpolate.js";
@@ -290,7 +288,7 @@ export const measureSpring = ({
  *
  * @param frame - Frame to evaluate, relative to `delay`
  * @param fps - Frames per second of the composition
- * @param config - Physics overrides; omitted keys fall back to Remotion's defaults
+ * @param config - Physics overrides; omitted keys fall back to the defaults
  * @param from - Value at rest before the spring starts
  * @param to - Value the spring settles on
  * @param durationInFrames - Stretch or squash the spring into this many frames
