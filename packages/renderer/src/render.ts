@@ -32,7 +32,14 @@ import {
   type PageComposition,
 } from "./browser.ts";
 import { chunkRange } from "./chunks.ts";
-import { checkFfmpeg, encodeWithFFmpeg } from "./ffmpeg.ts";
+import {
+  checkFfmpeg,
+  encodeWithFFmpeg,
+  inferOutputFormat,
+  resolveGifFps,
+  type GifOptions,
+  type OutputFormat,
+} from "./ffmpeg.ts";
 import { serveBuild } from "./serve.ts";
 
 /** Everything one render needs. */
@@ -45,19 +52,27 @@ export type RenderOptions = {
   compositionId: string;
   /** Props passed through the render URL; omit to use the composition defaults. */
   props?: Record<string, unknown>;
-  /** Destination path of the MP4. Parent directories must already exist. */
+  /**
+   * Destination path. Its extension chooses the format — `.mp4`/`.mov`/`.mkv`
+   * for H.264, `.webm` for VP9, `.gif` for an animated GIF. Parent directories
+   * must already exist.
+   */
   out: string;
   /**
    * How many chunks render in parallel. Defaults to `1`; every extra chunk costs
    * another browser context, a document load and a GPU-less raster of its own.
    */
   concurrency?: number;
-  /** H.264 quality passed to FFmpeg — lower is better. Defaults to 18. */
+  /** Quality passed to FFmpeg — lower is better. H.264 defaults to 18, VP9 to 32. */
   crf?: number;
-  /** Video codec name passed to FFmpeg. Defaults to `libx264`. */
+  /** Video codec name passed to FFmpeg. Defaults to `libx264`, or VP9 for WebM. */
   codec?: string;
-  /** Encoder speed/size tradeoff passed to FFmpeg. Defaults to `medium`. */
+  /** Encoder speed/size tradeoff passed to FFmpeg. MP4 only. Defaults to `medium`. */
   preset?: string;
+  /** Forces a format instead of inferring it from `out`'s extension. */
+  format?: OutputFormat;
+  /** GIF tuning. Ignored unless the format is GIF; caps width at 1280 and fps at 15. */
+  gif?: GifOptions;
   /** Called after each captured frame with the running and expected totals. */
   onProgress?: (done: number, total: number) => void;
   /**
@@ -79,6 +94,10 @@ export type RenderResult = {
   height: number;
   durationInFrames: number;
   out: string;
+  /** Format that was written; GIF and WebM drop frames, the rest match `fps`. */
+  format: OutputFormat;
+  /** Frame rate actually written to the file. A GIF is capped, so this can be below `fps`. */
+  outputFps: number;
   /** Warnings collected from `[svelte-motion]` console messages, deduped, capped at 50. */
   warnings: string[];
   /** Time in ms spent waiting for readiness (probe + first frame). */
@@ -209,14 +228,19 @@ const resolveComposition = async (
 };
 
 /**
- * Renders one composition to an MP4.
+ * Renders one composition to a video file or an animated image.
  *
  * @param options - Build directory, composition id, destination and encoder knobs
  * @returns Frame count, dimensions and the output path
- * @throws When ffmpeg is missing, the id is unknown, a frame never becomes ready,
- *   or FFmpeg fails — always after the browser and server are torn down
+ * @throws When ffmpeg is missing, the output format cannot be determined, the id
+ *   is unknown, a frame never becomes ready, or FFmpeg fails — always after the
+ *   browser and server are torn down
  */
 export const renderComposition = async (options: RenderOptions): Promise<RenderResult> => {
+  // Resolving the format first means a destination FFmpeg cannot write fails in
+  // milliseconds, instead of after a full render has captured every frame.
+  const format = options.format ?? inferOutputFormat(options.out);
+
   if (!(await checkFfmpeg())) {
     throw new Error(MISSING_FFMPEG_MESSAGE);
   }
@@ -280,6 +304,11 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
         crf: options.crf,
         codec: options.codec,
         preset: options.preset,
+        format,
+        gif: options.gif,
+        // The GIF branch caps its own width; it needs the source size to know
+        // whether "1280" would upscale a narrower composition.
+        width: config.width,
       };
 
       /*
@@ -382,6 +411,8 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
         height: config.height,
         durationInFrames: config.durationInFrames,
         out: options.out,
+        format,
+        outputFps: format === "gif" ? resolveGifFps(encodeOptions) : config.fps,
         warnings: [...warnings],
         readyMs: readyMsProbe,
       };

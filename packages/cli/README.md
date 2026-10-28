@@ -62,7 +62,7 @@ Lists every composition the build registered. Text output is one line per compos
 ### render
 
 ```bash
-svelte-motion render: render a composition to video
+svelte-motion render: render a composition to video or an animated GIF
 
 Usage: svelte-motion render <id> --out <file> [options]
 
@@ -70,31 +70,48 @@ Arguments:
   <id>               Composition id (e.g. hello-world)
 
 Options:
-  --out <file>       Output file (required)
+  --out <file>       Output file (required). The extension picks the format:
+                     .mp4 .mov .mkv -> H.264, .webm -> VP9, .gif -> animated GIF
   --build <dir>      Build directory (default: build, try --build apps/studio/build in this monorepo)
   --props <json>     Props as JSON string
   --concurrency <n>  Parallel chunks (default: 1)
-  --crf <n>          H.264 quality (default: 18)
-  --codec <str>      Video codec (default: libx264)
-  --preset <str>     Encoder preset (default: medium)
+  --crf <n>          Quality, lower is better (default: 18 for H.264, 32 for VP9)
+  --codec <str>      Video codec (default: libx264, or libvpx-vp9 for .webm)
+  --preset <str>     Encoder preset, MP4 only (default: medium)
   --port <n>         Server port (default: 0, OS-assigned)
   --help, -h         Show help
 
+A GIF is capped at 1280px wide and 15fps, and quantised to a 128-colour
+palette. --crf, --codec and --preset do not apply to it.
+
 Examples:
   svelte-motion render hello-world --out out/hello-world.mp4 --build apps/studio/build
+  svelte-motion render hello-world --out out/hello-world.gif --build apps/studio/build
   svelte-motion render hello-world --out out.mp4 --props '{"title":"Hi"}' --concurrency 2 --build apps/studio/build
 ```
 
 | Flag            | Type        | Default   | Notes                                                     |
 | --------------- | ----------- | --------- | --------------------------------------------------------- |
-| `--out`         | string      | required  | Output MP4 path                                           |
+| `--out`         | string      | required  | Output path; the extension picks the format               |
 | `--build`       | string      | `build`   | Build directory, use `apps/studio/build` in this monorepo |
 | `--props`       | JSON string |           | Props object, must be a JSON object not an array          |
 | `--concurrency` | number      | `1`       | Parallel chunks, must be at least 1                       |
-| `--crf`         | number      | `18`      | H.264 quality 0 to 51, lower is better                    |
+| `--crf`         | number      | `18`      | H.264 quality 0 to 51, lower is better (VP9: 32)          |
 | `--codec`       | string      | `libx264` | Video codec for FFmpeg `-c:v`                             |
-| `--preset`      | string      | `medium`  | Encoder preset                                            |
+| `--preset`      | string      | `medium`  | Encoder preset, MP4 only                                  |
 | `--port`        | number      | `0`       | Build server port, 0 is OS assigned                       |
+
+### Formats
+
+The output extension picks the encoder:
+
+| Extension            | Format | Notes                                                                                              |
+| -------------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| `.mp4` `.mov` `.mkv` | H.264  | The default. `--crf`, `--codec` and `--preset` apply.                                              |
+| `.webm`              | VP9    | Same support as a GIF in every modern browser, a fraction of the bytes. `--crf` defaults to 32.    |
+| `.gif`               | GIF    | Palette-quantised, capped at 1280px wide and 15fps. `--crf`, `--codec` and `--preset` are ignored. |
+
+An extension in none of those lists fails before the render starts, rather than after every frame has been captured.
 
 ## Examples
 

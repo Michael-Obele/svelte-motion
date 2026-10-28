@@ -170,7 +170,8 @@ bun packages/cli/src/index.ts render stat-grid --out out/stat-grid.mp4 --build e
 2. The renderer serves that build with `Bun.serve` and opens `/render?composition=<id>&frame=<n>` in headless Chromium.
 3. For each frame it sets the frame through `window.svelteMotion_setFrame(n)` and waits for the paint.
 4. Playwright screenshots the frame as a PNG.
-5. The PNGs stream into FFmpeg over `image2pipe` and come out as an MP4.
+5. The PNGs stream into FFmpeg over `image2pipe` and come out as a video — or as a
+   GIF or WebM when the output name asks for one by extension.
 
 ## Project structure
 

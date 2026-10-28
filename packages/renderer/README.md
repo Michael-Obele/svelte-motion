@@ -30,7 +30,8 @@ const result = await renderComposition({
 });
 
 console.log(result);
-// { frameCount: 90, fps: 30, width: 1920, height: 1080, durationInFrames: 90, out: "out/hello-world.mp4", warnings: [], readyMs: 123 }
+// { frameCount: 90, fps: 30, outputFps: 30, width: 1920, height: 1080, durationInFrames: 90,
+//   format: "mp4", out: "out/hello-world.mp4", warnings: [], readyMs: 123 }
 ```
 
 ## Pipeline
@@ -89,8 +90,10 @@ import { checkFfmpeg, buildFfmpegArgs, encodeWithFFmpeg } from "@svelte-motion/r
 | `checkFfmpeg()`                     | `() => Promise<boolean>`                         | True when `ffmpeg -version` exits 0.                                                                                 |
 | `buildFfmpegArgs(options)`          | `(EncodeOptions) => string[]`                    | Builds argv for `image2pipe` input. Order is load bearing, `-framerate` before `-i pipe:0`. Includes bitexact flags. |
 | `encodeWithFFmpeg(frames, options)` | `(Uint8Array[], EncodeOptions) => Promise<void>` | Pipes PNGs to FFmpeg stdin. Throws with tail of stderr on failure.                                                   |
+| `inferOutputFormat(out)`            | `(string) => OutputFormat`                       | Reads `mp4`, `webm` or `gif` off the extension; throws naming the ones it knows.                                     |
+| `resolveGifFps(options)`            | `(EncodeOptions) => number`                      | The rate a GIF will really run at, after the frame-dropping filter.                                                  |
 
-`EncodeOptions { out, fps, crf?, codec?, preset? }`. Defaults: `crf 18`, `codec libx264`, `preset medium`, `pix_fmt yuv420p`.
+`EncodeOptions { out, fps, crf?, codec?, preset?, format?, gif?, width? }`. The format comes from `format`, or from `out`'s extension: `.mp4`/`.mov`/`.mkv` → H.264 (`crf 18`, `codec libx264`, `preset medium`, `pix_fmt yuv420p`), `.webm` → VP9 (`crf 32`, constant-quality via `-b:v 0`), `.gif` → an animated GIF (`maxColors 128`, `fps` capped at 15, `width` capped at 1280; `crf`/`codec`/`preset` do not apply).
 
 ### Chunking
 
@@ -113,19 +116,21 @@ import { renderComposition } from "@svelte-motion/renderer";
 | ---------------- | ------------------------- | --------- | -------------------------------------------------- |
 | `buildDir`       | `string`                  | required  | Directory holding the built Studio                 |
 | `compositionId`  | `string`                  | required  | Registry id, for example `hello-world`             |
-| `out`            | `string`                  | required  | Destination MP4 path, parent must exist            |
+| `out`            | `string`                  | required  | Destination path; the extension picks the format   |
 | `props`          | `Record<string, unknown>` |           | Passed through `?props=` as URL encoded JSON       |
 | `port`           | `number`                  | `0`       | Build server port, 0 is OS assigned                |
 | `concurrency`    | `number`                  | `1`       | Parallel chunks, each gets its own browser context |
-| `crf`            | `number`                  | `18`      | H.264 quality, lower is better                     |
+| `crf`            | `number`                  | `18`      | Quality, lower is better (VP9: 32)                 |
 | `codec`          | `string`                  | `libx264` | Video codec for `-c:v`                             |
-| `preset`         | `string`                  | `medium`  | Encoder preset                                     |
+| `preset`         | `string`                  | `medium`  | Encoder preset, MP4 only                           |
+| `format`         | `OutputFormat`            |           | Forces `mp4`, `webm` or `gif` over the extension   |
+| `gif`            | `GifOptions`              |           | `{ maxColors?, fps?, width? }`, GIF only           |
 | `readyTimeoutMs` | `number`                  | `30000`   | How long to wait for readiness per frame           |
 | `onProgress`     | `(done, total) => void`   |           | Called after each captured frame                   |
 
-`RenderResult { frameCount, fps, width, height, durationInFrames, out, warnings, readyMs }`. Warnings are deduped `[svelte-motion]` console messages, capped at 50. `readyMs` is time spent waiting for readiness during the probe.
+`RenderResult { frameCount, fps, width, height, durationInFrames, out, format, outputFps, warnings, readyMs }`. `outputFps` is the rate actually written — a GIF is capped, so it can be below `fps`. Warnings are deduped `[svelte-motion]` console messages, capped at 50. `readyMs` is time spent waiting for readiness during the probe.
 
-Errors: missing ffmpeg, unknown composition id (lists available ids), page never booted (no registry bridge), props validation failure, frame never ready (names pending handles), FFmpeg non zero exit.
+Errors: missing ffmpeg, an output extension that names no known format (before the browser ever launches), unknown composition id (lists available ids), page never booted (no registry bridge), props validation failure, frame never ready (names pending handles), FFmpeg non zero exit.
 
 ## Determinism
 

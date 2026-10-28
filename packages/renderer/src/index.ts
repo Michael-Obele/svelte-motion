@@ -22,6 +22,15 @@ export {
   type FrameSize,
   type PageComposition,
 } from "./browser.ts";
-export { buildFfmpegArgs, checkFfmpeg, encodeWithFFmpeg, type EncodeOptions } from "./ffmpeg.ts";
+export {
+  buildFfmpegArgs,
+  checkFfmpeg,
+  encodeWithFFmpeg,
+  inferOutputFormat,
+  resolveGifFps,
+  type EncodeOptions,
+  type GifOptions,
+  type OutputFormat,
+} from "./ffmpeg.ts";
 export { chunkRange, type FrameRange } from "./chunks.ts";
 export { renderComposition, type RenderOptions, type RenderResult } from "./render.ts";

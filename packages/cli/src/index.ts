@@ -59,7 +59,7 @@ Examples:
   svelte-motion list --json --build apps/studio/build
 `;
 
-const HELP_RENDER = `svelte-motion render: render a composition to video
+const HELP_RENDER = `svelte-motion render: render a composition to video or an animated GIF
 
 Usage: svelte-motion render <id> --out <file> [options]
 
@@ -67,18 +67,23 @@ Arguments:
   <id>               Composition id (e.g. hello-world)
 
 Options:
-  --out <file>       Output file (required)
+  --out <file>       Output file (required). The extension picks the format:
+                     .mp4 .mov .mkv -> H.264, .webm -> VP9, .gif -> animated GIF
   --build <dir>      Build directory (default: build, try --build apps/studio/build in this monorepo)
   --props <json>     Props as JSON string
   --concurrency <n>  Parallel chunks (default: 1)
-  --crf <n>          H.264 quality (default: 18)
-  --codec <str>      Video codec (default: libx264)
-  --preset <str>     Encoder preset (default: medium)
+  --crf <n>          Quality, lower is better (default: 18 for H.264, 32 for VP9)
+  --codec <str>      Video codec (default: libx264, or libvpx-vp9 for .webm)
+  --preset <str>     Encoder preset, MP4 only (default: medium)
   --port <n>         Server port (default: 0, OS-assigned)
   --help, -h         Show help
 
+A GIF is capped at 1280px wide and 15fps, and quantised to a 128-colour
+palette. --crf, --codec and --preset do not apply to it.
+
 Examples:
   svelte-motion render hello-world --out out/hello-world.mp4 --build apps/studio/build
+  svelte-motion render hello-world --out out/hello-world.gif --build apps/studio/build
   svelte-motion render hello-world --out out.mp4 --props '{"title":"Hi"}' --concurrency 2 --build apps/studio/build
 `;
 
@@ -440,8 +445,15 @@ async function runRender(command: RenderCommand): Promise<void> {
   }
 
   const seconds = (result.durationInFrames / result.fps).toFixed(1);
+  // Report the rate that is actually in the file: a GIF written at 15fps from a
+  // 30fps composition would otherwise claim a rate it does not play at.
+  const rate =
+    result.outputFps === result.fps
+      ? `${result.fps}fps`
+      : `${result.outputFps}fps (from ${result.fps})`;
+
   console.log(
-    `${command.compositionId} → ${command.out} (${result.frameCount} frames, ${result.width}x${result.height} @ ${result.fps}fps, ${seconds}s)`,
+    `${command.compositionId} → ${command.out} (${result.format}, ${result.frameCount} frames, ${result.width}x${result.height} @ ${rate}, ${seconds}s)`,
   );
 
   for (const warning of result.warnings) {
