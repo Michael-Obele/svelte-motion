@@ -44,17 +44,17 @@ Published to npm as three packages: `@svelte-motion/core`, `@svelte-motion/rende
 
 What works today:
 
-- Frame runtime, timeline primitives, composition registry, and math helpers ported from Remotion 4.0.538 with parity tests
+- Frame runtime, timeline primitives, composition registry, and math helpers. The math kernels are being replaced with clean-room implementations (M1.5); Remotion parity is not a goal.
 - Player with playback, seek, and loop
 - Renderer that produces byte-identical MP4s across runs
 - CLI with `render` and `list`
-- Studio with a composition picker, preview, scrubber, and timeline bar
+- Studio with a composition picker, preview, scrubber, nested timeline bars, props editor, and keyboard shortcuts
 
 Known limits:
 
 - Video only. Audio components exist for preview, but audio is not muxed into the MP4 yet.
-- The Studio timeline shows one track with a playhead. Sequence nesting bars need a timeline registry that does not exist yet.
-- `interpolate` does not implement Remotion's `output` and `outputType` CSS sugar (`perceptual-scale`, `font-weight`). Passing either option throws.
+- The Studio is for authoring and preview. Rendering stays in the CLI (D19).
+- `interpolate` does not implement the `output` and `outputType` CSS sugar (`perceptual-scale`, `font-weight`). Passing either option throws; the decision to implement or remove it is still open.
 - One browser page per concurrency slot, default concurrency 1.
 
 ## Install

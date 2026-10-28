@@ -22,11 +22,13 @@ If you need the full spec, read the canonical copy at `AI-Plans/plans/svelte-mot
 | `plan/README.md`            | Human door — summary, deliverables, next steps          | You need the 30-second overview                     |
 | `plan/research.md`          | Verified facts + sources, React vs Svelte answer        | You need a verified fact or a source                |
 | `plan/architecture.md`      | Components, module layout, frame runtime, failure modes | You need components, data flow, or interfaces       |
-| `plan/svelte-mapping.md`    | Exact React → Svelte 5 API translation                  | You need the Remotion → Svelte API table            |
+| `plan/svelte-mapping.md`    | React → Svelte 5 API translation                        | You need the Remotion concept → Svelte table        |
 | `plan/rendering.md`         | Headless Chrome + FFmpeg pipeline, determinism, CLI     | You need the render pipeline or concurrency rules   |
-| `plan/decisions.md`         | 14 decisions, 10 risks, open questions                  | You need why a choice was made or what was rejected |
-| `plan/milestones.md`        | M0–M6 with commands and done-when gates                 | You need the next task and its gate                 |
-| `plan/repomix/remotion.xml` | Full Remotion source, 12,733 files, 9.8M tokens, XML    | You need Remotion internals verbatim                |
+| `plan/decisions.md`         | D1–D27, risks, open questions                           | You need why a choice was made or what was rejected |
+| `plan/milestones.md`        | M0–M9 plus M1.5 with commands and done-when gates       | You need the next task and its gate                 |
+| `GLOSSARY.md`               | Terms used across the project                           | You need a precise definition, not a spec           |
+| `docs/adr/`                 | Load-bearing decisions and what they cost               | You need the reasoning behind a boundary            |
+| `plan/repomix/remotion.xml` | Remotion source, 12,733 files, 9.8M tokens, XML         | You need prior-art behaviour (do not copy; D22)     |
 
 ## Architecture at a glance
 
@@ -35,7 +37,7 @@ Author writes Svelte composition (frame -> pixels)
   -> Vite+ 1.4 (via @voidzero-dev/vite-plus-core 1.4.0) + SvelteKit 3.1 + Bun 1.4.4 bundles to browser JS
   -> dev: SvelteKit dev server + Studio (scrubber, timeline)
   -> render: Playwright launches headless Chromium
-           -> for frame 0..N: set frame, wait ready, screenshot PNG
+           -> for frame 0..durationInFrames-1: set frame, wait ready, screenshot PNG
            -> FFmpeg via Bun.spawn stitches PNGs to MP4
 ```
 
@@ -100,7 +102,7 @@ See `plan/architecture.md` for the full component table, interfaces, and failure
 
 ## Decisions (settled)
 
-- **D1** Start clean from `bunx sv create`, copy MIT math helpers only — don't fork `svelte-in-motion`.
+- **D1** Start clean from `bunx sv create`; don't fork `svelte-in-motion`. The "copy math helpers" half is superseded by D22.
 - **D2** Svelte 5 runes only (`$state`, `$derived`, `$effect`, `$props`, snippets).
 - **D3** SvelteKit 3.1 + Vite+ 1.4 + Bun 1.4.4 (routing, adapters, `adapter-static` for render). Confirmed at scaffold, not Vite 6 or SvelteKit 2.
 - **D4** Vite for bundling, not Webpack.
@@ -117,12 +119,25 @@ See `plan/architecture.md` for the full component table, interfaces, and failure
 - **D18** OpenTUI (`@opentui/core`) for the CLI TUI: full interactive mode, one-shot commands kept,
   bin renamed `cli` → `svelte-motion`. Spiked and verified under Bun 1.4.4. See `plan/decisions.md`.
 - **D19** Studio stays CLI-only for rendering this round; the browser/Node boundary stays unpierced.
-- **D20** Audio deferred; `interpolate` output options and streaming encode ship as M9.
+- **D20** Audio deferred; streaming encode ships in M9. `interpolate` `output`/`outputType` CSS sugar is deliberately unimplemented and needs a decision (implement from spec or remove the throw).
 - **D21** Subagent model: DeepSeek V4.1 Flash primary, Muse Spark 1.3 Contributor fallback
   (Michael's call 2026-10-25, overrides ZenPick's Muse advantage).
+- **D22** Math kernels are being replaced with clean-room re-implementations, not copies; the product
+  stays MIT and Remotion parity is not a gate. M1.5 blocks release. See `docs/adr/0001-clean-room-math-kernels-and-mit.md`.
+- **D23** Position as programmatic video for SvelteKit, not a Remotion clone: SvelteKit integration,
+  agent-first authoring, Svelte-native ergonomics, in that order. See `docs/adr/0002-programmatic-video-for-sveltekit.md`.
+- **D24** One frame range: `[0, durationInFrames - 1]`; one `clampFrame` serves every entry point.
+  See `docs/adr/0003-one-frame-range-policy.md`.
+- **D25** Hosts key playback sessions on composition identity plus init-only config, never on frame;
+  the shell owns the `window.svelteMotion_*` environment flags.
+- **D26** Props: absent means defaults; present but invalid reports and renders defaults; valid passes
+  Valibot's validated output, never the raw parsed object.
+- **D27** Media readiness handlers run first, then forward to the user's callback; props use Svelte's
+  native element attribute types.
 
-Open questions live in `plan/decisions.md`: system FFmpeg vs shipped binaries, Zod acceptance.
-SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path. Studio scope is settled (D18, M8).
+Open questions live in `plan/decisions.md`: system FFmpeg vs shipped binaries, Zod acceptance, and the
+`interpolate` output sugar. SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path. Studio
+scope is settled (D18, M8).
 
 ## Rendering pipeline (determinism is the gate)
 
@@ -133,7 +148,9 @@ SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path. Studio scop
 3. **Capture** — Playwright `page.goto('.../render?composition=id&frame=N')` → wait `svelteMotion_ready()` + `document.fonts.ready` → `page.screenshot({ clip })`.
 4. **Encode** — `Bun.spawn` FFmpeg image2pipe: `ffmpeg -framerate 30 -f image2pipe -vcodec png -i pipe:0 -c:v libx264 -pix_fmt yuv420p -map_metadata -1 -fflags +bitexact out.mp4`.
 
-Rules: frames must be pure functions of `frame` (no `Math.random`/`Date.now`), `window.svelteMotion_*` globals drive the renderer, kill the server in `finally`.
+Rules: frames must be pure functions of `frame` (no `Math.random`/`Date.now`), the valid range is
+`0..durationInFrames-1` and every entry point clamps through `clampFrame` (D24), `window.svelteMotion_*`
+globals drive the renderer, kill the server in `finally`.
 
 Render gates: M0 determinism (`tools/spike/verify-determinism.ts` screenshots frame 0 and 90 twice, byte equality), M2 MP4 byte equality (same render twice produces identical bytes), M4 player parity (`tools/spike/verify-player-parity.ts` compares Player PNG to renderer PNG at same frame).
 
@@ -149,25 +166,26 @@ See `plan/rendering.md` for concurrency, asset prefetch, and `delayRender` timeo
 | `<Series>`                 | `<Series>`                                   | Computes `from` cumulatively                     |
 | `<Loop>` / `<Freeze>`      | `<Loop>` / `<Freeze>`                        | `frame % duration` / pinned frame                |
 | `Composition`              | `defineComposition` + `import.meta.glob`     | Registry via Vite glob                           |
-| `interpolate`/`spring`     | `interpolate`/`spring`                       | Pure TS, copied verbatim                         |
+| `interpolate`/`spring`     | `interpolate`/`spring`                       | Pure TS; clean-room re-implementation planned    |
 | `delayRender`              | `delayRender` + `ready`                      | Counter-based, renderer polls                    |
 
 See `plan/svelte-mapping.md` for the full table and snippet examples.
 
-## Milestones (M0–M6)
+## Milestones (M0–M9 plus M1.5)
 
-| Milestone | Title                | Gate                                                                                                         | Status      |
-| --------- | -------------------- | ------------------------------------------------------------------------------------------------------------ | ----------- |
-| M0        | Recon and the spike  | Same component screenshots identically at frame 0 and 90, determinism holds                                  | done        |
-| M1        | Math and timeline    | `interpolate`/`spring`/`Sequence` match Remotion output, tests pass                                          | done        |
-| M2        | Renderer CLI         | `svelte-motion render hello-world --out out.mp4` produces 3s MP4, frame count matches                        | done        |
-| M3        | Assets and readiness | Font-heavy composition with `delayRender` renders without blank frames                                       | done        |
-| M4        | Player               | `Player` plays at `fps` with scrubber, preview matches renderer PNG                                          | done        |
-| M5        | Studio               | Composition picker, preview, scrubber, duration timeline bar (nested Sequence bars need a timeline registry) | mostly done |
-| M6        | Polish, docs, skills | Docs, Valibot props, CLI help, tests pass (agent skills not written yet)                                     | mostly done |
-| M7        | CLI TUI              | Interactive OpenTUI mode renders with live progress at any width; one-shot commands unchanged (see D18)      | done        |
-| M8        | Studio proper        | Timeline registry drives nested Sequence bars, props editor, shortcuts, lucide icons (see D19)               | done        |
-| M9        | Debts and cleanup    | `interpolate` output options fixed, streaming encode, agent skills, docs swept (see D20)                     | mostly done |
+| Milestone | Title                | Gate                                                                                                          | Status      |
+| --------- | -------------------- | ------------------------------------------------------------------------------------------------------------- | ----------- |
+| M0        | Recon and the spike  | Same component screenshots identically at frame 0 and 90, determinism holds                                   | done        |
+| M1        | Math and timeline    | Determinism plus curated behavioural fixtures; divergence from prior art documented (no Remotion parity gate) | done        |
+| M1.5      | Clean-room kernels   | Kernel contracts plus independent fixtures; transcribed code deleted; provenance audit clean (see D22)        | pending     |
+| M2        | Renderer CLI         | `svelte-motion render hello-world --out out.mp4` produces 3s MP4, frame count matches                         | done        |
+| M3        | Assets and readiness | Font-heavy composition with `delayRender` renders without blank frames                                        | done        |
+| M4        | Player               | `Player` plays at `fps` with scrubber, preview matches renderer PNG                                           | done        |
+| M5        | Studio               | Composition picker, preview, scrubber, duration timeline bar; nested bars land in M8                          | done        |
+| M6        | Polish, docs, skills | Docs, Valibot props, CLI help, tests pass; agent skills land in M9                                            | mostly done |
+| M7        | CLI TUI              | Interactive OpenTUI mode renders with live progress at any width; one-shot commands unchanged (see D18)       | done        |
+| M8        | Studio proper        | Timeline registry drives nested Sequence bars, props editor, shortcuts, lucide icons (see D19)                | done        |
+| M9        | Debts and cleanup    | `interpolate` output sugar decided, streaming encode, agent skills, docs swept (see D20)                      | mostly done |
 
 See `plan/milestones.md` for commands and done-when checklists.
 
@@ -177,6 +195,9 @@ See `plan/milestones.md` for commands and done-when checklists.
 - Keep `plan/` out of commits. Update `AGENTS.md` if the index drifts.
 - Frame runtime is the single source of truth: `frame` as `$state`, derived values as `$derived`, never assign to `$state` inside `$effect` for frame math.
 - Determinism gate blocks everything: no wall clock, no randomness in compositions.
+- Do not copy Remotion code. The math kernels are being replaced with clean-room implementations (D22);
+  M1.5 blocks release until the transcribed ones are deleted and the provenance audit is clean. See
+  `docs/adr/0001-clean-room-math-kernels-and-mit.md`.
 - Prefer `Bun.spawn` and Valibot per stack decisions; document any deviation in `plan/decisions.md`.
 - Svelte 5 constraint: named component prop types must live in `.ts` files (`timeline/types.ts`, `player/types.ts`). Components export only the default, `svelte-check` cannot see named exports from `.svelte` files.
 
@@ -186,15 +207,20 @@ Do not test a workflow by pushing it and watching the run. Most workflow bugs ar
 schema, expression grammar, permissions, injection — and never need a runner. Work down this
 list and stop at the first layer that answers the question:
 
-| Layer     | Command                                                          | Catches                                                                                                                   | Cost         |
-| --------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| Static    | `uvx actionlint -shellcheck= -pyflakes= .github/workflows/*.yml` | Schema and expression errors — the "This run likely failed because of a workflow file issue" class, where zero jobs start | ~0.1s        |
-| Security  | `uvx zizmor --offline .`                                         | Injection, unpinned actions, over-broad permissions, credential persistence                                               | ~13s cold    |
-| Execution | `act push -W .github/workflows/<file>.yml -j <job>`              | "Does the job actually run"                                                                                               | ~10s warm    |
-| Logic     | `bun test tools/release/`                                        | The actual decision a step makes                                                                                          | milliseconds |
+| Layer     | Command                                                                               | Catches                                                                                                                   | Cost         |
+| --------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Static    | `uvx --from actionlint-py actionlint -shellcheck= -pyflakes= .github/workflows/*.yml` | Schema and expression errors — the "This run likely failed because of a workflow file issue" class, where zero jobs start | ~1s          |
+| Security  | `uvx zizmor --offline .`                                                              | Injection, unpinned actions, over-broad permissions, credential persistence                                               | ~13s cold    |
+| Execution | `act push -W .github/workflows/<file>.yml -j <job>`                                   | "Does the job actually run"                                                                                               | ~10s warm    |
+| Logic     | `bun test tools/release/`                                                             | The actual decision a step makes                                                                                          | milliseconds |
 
 `actionlint` is already a CI gate (`.github/workflows/actionlint.yml`); run it locally before
-pushing a workflow change. `zizmor` is not gated yet — run it when you touch a workflow.
+pushing a workflow change. It is a Go binary, so `uvx actionlint` fails with "No solution found
+when resolving tool dependencies" — use `uvx --from actionlint-py actionlint` or the pinned
+binary. `zizmor` is not gated yet — run it when you touch a workflow. It currently reports
+`unpinned-uses` across `actionlint.yml`, `publish.yml`, `release.yml` and `ci.yml` because actions
+are pinned to tags (`@v7`, `@v2`) rather than commit SHAs; that is a deliberate repo-wide style
+choice, not a regression, so do not "fix" it in one file only.
 
 `act` is installed and its runner image is cached. `.actrc` sets `--pull=false`, because the
 default re-checks the 2.3 GB image on every run; pull it by hand when you want a newer one.
@@ -218,5 +244,7 @@ provable in milliseconds instead of a push-and-wait cycle.
 - Studio surfaces: `packages/studio-ui/src/lib/` (`Studio`, `RenderHost`, `PlayerHost`, `host-params`)
 - A user-facing composition: `examples/src/lib/compositions/title-card/`
 - Render pipeline: `packages/renderer/src/render.ts`
-- Full Remotion source (read-only reference): `plan/repomix/remotion.xml`
+- Terms: `GLOSSARY.md`
+- Load-bearing decisions: `docs/adr/`
+- Remotion source (prior-art reference only; do not copy): `plan/repomix/remotion.xml`
 - Public overview: `README.md`
