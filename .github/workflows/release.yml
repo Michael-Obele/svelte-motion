@@ -120,6 +120,9 @@ jobs:
       contents: read
     steps:
       - name: Start the publish workflow
+        # `ref_name` is a branch or tag name. Interpolated into `run:` it is
+        # shell input; through `env:` it is only ever a string.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run publish.yml --ref "${{ github.ref_name }}"
+          REF_NAME: ${{ github.ref_name }}
+        run: gh workflow run publish.yml --ref "$REF_NAME"

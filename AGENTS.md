@@ -180,6 +180,37 @@ See `plan/milestones.md` for commands and done-when checklists.
 - Prefer `Bun.spawn` and Valibot per stack decisions; document any deviation in `plan/decisions.md`.
 - Svelte 5 constraint: named component prop types must live in `.ts` files (`timeline/types.ts`, `player/types.ts`). Components export only the default, `svelte-check` cannot see named exports from `.svelte` files.
 
+## Testing workflows without pushing
+
+Do not test a workflow by pushing it and watching the run. Most workflow bugs are static —
+schema, expression grammar, permissions, injection — and never need a runner. Work down this
+list and stop at the first layer that answers the question:
+
+| Layer     | Command                                                          | Catches                                                                                                                   | Cost         |
+| --------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Static    | `uvx actionlint -shellcheck= -pyflakes= .github/workflows/*.yml` | Schema and expression errors — the "This run likely failed because of a workflow file issue" class, where zero jobs start | ~0.1s        |
+| Security  | `uvx zizmor --offline .`                                         | Injection, unpinned actions, over-broad permissions, credential persistence                                               | ~13s cold    |
+| Execution | `act push -W .github/workflows/<file>.yml -j <job>`              | "Does the job actually run"                                                                                               | ~10s warm    |
+| Logic     | `bun test tools/release/`                                        | The actual decision a step makes                                                                                          | milliseconds |
+
+`actionlint` is already a CI gate (`.github/workflows/actionlint.yml`); run it locally before
+pushing a workflow change. `zizmor` is not gated yet — run it when you touch a workflow.
+
+`act` is installed and its runner image is cached. `.actrc` sets `--pull=false`, because the
+default re-checks the 2.3 GB image on every run; pull it by hand when you want a newer one.
+Useful flags: `act -l` lists every job, `--dryrun` prints the graph without running, and
+`-s GITHUB_TOKEN="$(gh auth token)"` is needed for any step that clones an action.
+
+`act` has limits worth knowing before you trust it: it runs against the real repository (a
+workflow that pushes a branch will push it), it cannot mock the GitHub API, and its default
+images are incomplete. `changesets/action` in particular fails at the end with
+`Reference does not exist` because it calls the real API — that failure is expected locally.
+
+The most efficient test is the one that needs no workflow at all: put the decision in a script
+under `tools/` and unit-test it. `tools/release/version-from-commits.ts` is the model — the
+release workflow is thin glue around a function with `bun test` coverage, so a policy change is
+provable in milliseconds instead of a push-and-wait cycle.
+
 ## Where to look next
 
 - Frame runtime: `packages/core/src/lib/motion/context.svelte.ts`

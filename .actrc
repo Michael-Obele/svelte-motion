@@ -1,0 +1,10 @@
+# act defaults for this repo. One argument per line, no comments supported by
+# act itself — these lines are for the reader.
+#
+# `--pull` defaults to true, so every `act` invocation re-checks the runner
+# image against the registry. The image is 2.3 GB and it does not change between
+# runs, so that is a network round trip for nothing. Pull it once by hand when
+# you actually want a newer one:
+#
+#   docker pull ghcr.io/catthehacker/ubuntu:act-latest
+--pull=false
