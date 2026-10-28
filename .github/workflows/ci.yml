@@ -4,6 +4,12 @@
 # request that changes a published package must include a changeset. That is what makes
 # `.changeset/config.json` more than decoration — without it, a version bump can be
 # forgotten silently and the next release publishes the wrong number.
+#
+# `check` proves the code type-checks and the unit suites pass. It does NOT prove the
+# product's central promise — deterministic, correct rendering — because the renderer
+# e2e suite is opt-in (`SM_E2E=1`) and the native-Bun gates live outside `vp test`.
+# The `render` job below is that proof: a real Chromium, a real FFmpeg, the e2e suite,
+# and the two spikes that demand byte equality (render vs render; render vs player).
 
 name: ci
 
@@ -28,6 +34,9 @@ jobs:
           # `changeset status --since` diffs against the base branch, so the full
           # history has to be present.
           fetch-depth: 0
+          # Nothing in this job pushes, so do not leave the checkout token in
+          # `.git/config` for later steps to find.
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -72,3 +81,77 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: ./node_modules/.bin/changeset status --since="origin/$BASE_REF"
+
+  # The gates the `check` job cannot reach.
+  #
+  # Why a separate job instead of more steps in `check`: these runs need a browser
+  # download, a full encode, and minutes of wall clock. Keeping them separate means
+  # a unit-test regression reports separately from a rendering regression, and the
+  # job name says which promise broke.
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Nothing here pushes or opens a pull request, so the checkout token has
+          # no reason to survive in `.git/config`.
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      # Same pin as `check`: `vp` needs `node:util.styleText` (Node 20.12+), and
+      # leaving it to the runner image makes CI depend on when GitHub rolls it.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - run: bun install --frozen-lockfile
+
+      # FFmpeg is a hard requirement for every gate below: the renderer pipes PNGs
+      # into it, and both spikes read the container back with ffprobe. Installed
+      # explicitly rather than assumed present on the runner image.
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -1
+
+      # Resolve the browser through the installed `playwright` package, not a
+      # version typed here. `packages/renderer/package.json` pins playwright
+      # 1.64.1, and that package knows which Chromium revision it needs; a
+      # hand-written revision would drift on the next playwright bump.
+      # `--with-deps` installs the shared libraries Chromium needs on a bare
+      # Ubuntu runner.
+      - name: Install Chromium
+        working-directory: packages/renderer
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+
+      # The e2e suite renders `apps/studio/build` (fixtures) and
+      # `examples/build` (the shipped examples), so both have to exist first.
+      - run: ./node_modules/.bin/vp run -r build
+
+      # The native-Bun gates. These are deliberately not Vitest tests: they run
+      # under Bun with the real `Bun.serve`, `Bun.spawn` and `Bun.file`, which is
+      # the runtime the renderer ships on. The Vitest suite only sees the Node
+      # shim, so it cannot catch a divergence between the two.
+      #
+      # They run before the e2e suite because they are the faster, more direct
+      # proof of the central promise: if determinism is broken, there is no point
+      # spending minutes rendering every example.
+      - name: Determinism gate
+        run: bun run tools/spike/verify-determinism.ts
+
+      - name: Player parity gate
+        run: bun run tools/spike/verify-player-parity.ts
+
+      # Run from inside the package, with the env var set in-process.
+      #
+      # `vp run`'s cache is environment-blind: it keys a task on inputs, not on
+      # the environment, so a cached renderer test can be reused from a run where
+      # `SM_E2E` was unset — and the e2e cases would silently skip. Invoking `vp`
+      # in the package directory sidesteps the task runner entirely.
+      - name: Renderer e2e (SM_E2E=1)
+        working-directory: packages/renderer
+        run: SM_E2E=1 ./node_modules/.bin/vp test

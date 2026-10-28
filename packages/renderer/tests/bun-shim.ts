@@ -43,10 +43,12 @@ const MIME: Readonly<Record<string, string>> = {
   ".json": "application/json",
   ".map": "application/json",
   ".mjs": "text/javascript",
+  ".mp4": "video/mp4",
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".txt": "text/plain",
   ".wasm": "application/wasm",
+  ".webm": "video/webm",
   ".webmanifest": "application/manifest+json",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
@@ -115,6 +117,70 @@ const pickDynamicPort = (): number => {
   return nextDynamicPort;
 };
 
+/**
+ * Applies a single byte range to a full response body.
+ *
+ * Real `Bun.serve` answers a `Range` request against a `Bun.file` with a 206 on
+ * its own. `node:http` does not, and a `<video>` element needs a 206 to seek —
+ * without one Chromium silently keeps `currentTime` at zero. The video-seek e2e
+ * test exercises the real `<Video>` path through this shim, so the shim has to
+ * mirror that part of Bun's behaviour too.
+ *
+ * Only the single-range form media elements send (`bytes=start-`, `bytes=start-end`,
+ * `bytes=-suffix`) is handled; a multi-range request falls through to the full
+ * 200, which is legal for a server that does not support ranges.
+ */
+const applyByteRange = (
+  request: import("node:http").IncomingMessage,
+  status: number,
+  headers: Record<string, string>,
+  body: Uint8Array,
+): { status: number; headers: Record<string, string>; body: Uint8Array } | undefined => {
+  const range = request.headers.range;
+
+  if (range === undefined || status !== 200 || body.length === 0) {
+    return undefined;
+  }
+
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+
+  if (match === null) {
+    return undefined;
+  }
+
+  const [, rawStart = "", rawEnd = ""] = match;
+
+  if (rawStart === "" && rawEnd === "") {
+    return undefined;
+  }
+
+  const total = body.length;
+  let start = rawStart === "" ? total - Number(rawEnd) : Number(rawStart);
+  let end = rawStart === "" || rawEnd === "" ? total - 1 : Number(rawEnd);
+
+  start = Math.max(0, start);
+  end = Math.min(end, total - 1);
+
+  if (start > end) {
+    return {
+      status: 416,
+      headers: { "content-range": `bytes */${total}` },
+      body: new Uint8Array(0),
+    };
+  }
+
+  return {
+    status: 206,
+    headers: {
+      ...headers,
+      "accept-ranges": "bytes",
+      "content-length": String(end - start + 1),
+      "content-range": `bytes ${start}-${end}/${total}`,
+    },
+    body: body.subarray(start, end + 1),
+  };
+};
+
 const serveShim = (options: ServeShimOptions): ServerShim => {
   const requested = options.port ?? 0;
   const port = requested === 0 ? pickDynamicPort() : requested;
@@ -122,10 +188,32 @@ const serveShim = (options: ServeShimOptions): ServerShim => {
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://localhost");
-      const reply = await options.fetch(new Request(url, { method: request.method ?? "GET" }));
-      const body = new Uint8Array(await reply.arrayBuffer());
+      // Headers matter to `serve.ts`: SPA fallback keys off `Accept` and
+      // `Sec-Fetch-Mode`, so dropping them here would make every navigation
+      // look like an asset fetch.
+      const headers = new Headers();
 
-      response.writeHead(reply.status, Object.fromEntries(reply.headers.entries()));
+      for (const [name, value] of Object.entries(request.headers)) {
+        if (value !== undefined) {
+          headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+        }
+      }
+
+      const reply = await options.fetch(
+        new Request(url, { method: request.method ?? "GET", headers }),
+      );
+      const body = new Uint8Array(await reply.arrayBuffer());
+      const headers = Object.fromEntries(reply.headers.entries());
+      const ranged = applyByteRange(request, reply.status, headers, body);
+
+      if (ranged !== undefined) {
+        response.writeHead(ranged.status, ranged.headers);
+        response.end(ranged.body);
+
+        return;
+      }
+
+      response.writeHead(reply.status, headers);
       response.end(body);
     } catch (error) {
       // A thrown handler must not leave the socket hanging: the render would
@@ -169,6 +257,7 @@ type SpawnShimResult = {
     end: () => Promise<void>;
   };
   exited: Promise<number>;
+  kill: () => void;
   stdout: ReadableStream<Uint8Array>;
   stderr: ReadableStream<Uint8Array>;
 };
@@ -220,6 +309,9 @@ const spawnShim = (command: readonly string[], options: SpawnShimOptions = {}): 
   const childStdin = child.stdin;
 
   return {
+    kill: () => {
+      child.kill("SIGKILL");
+    },
     stdin: {
       write: (chunk) => {
         childStdin?.write(chunk);

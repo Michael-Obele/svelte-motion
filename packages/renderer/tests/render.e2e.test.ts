@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
-import { renderComposition, serveBuild } from "../src/index.ts";
+import { captureFrame, renderComposition, serveBuild } from "../src/index.ts";
 import { launchBrowser, openComposition } from "../src/index.ts";
 import { installBunShim } from "./bun-shim.ts";
 
@@ -202,6 +202,46 @@ describe("renderComposition (e2e)", () => {
         // alone tells nobody which stage broke.
         expect({ sha256: secondDigest }).toEqual({ sha256: firstDigest });
         expect(secondBytes.length).toBe(firstBytes.length);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "serial and parallel capture produce byte-identical MP4s",
+    async () => {
+      await requireStudioBuild();
+
+      const dir = await makeTempDir();
+      const serial = join(dir, "serial.mp4");
+      const parallel = join(dir, "parallel.mp4");
+
+      try {
+        // One variable: how many browser contexts captured the frames. The
+        // parallel path finishes chunks out of order and rebuilds the sequence
+        // from absolute frame indices; if that reordering is wrong the file
+        // differs even though every frame was captured.
+        await renderComposition({
+          buildDir: BUILD_DIR,
+          compositionId: COMPOSITION_ID,
+          out: serial,
+          concurrency: 1,
+        });
+        await renderComposition({
+          buildDir: BUILD_DIR,
+          compositionId: COMPOSITION_ID,
+          out: parallel,
+          concurrency: 2,
+        });
+
+        const serialBytes = new Uint8Array(await readFile(serial));
+        const parallelBytes = new Uint8Array(await readFile(parallel));
+
+        expect({ sha256: sha256(parallelBytes) }).toEqual({ sha256: sha256(serialBytes) });
+        expect(parallelBytes.length).toBe(serialBytes.length);
+        expect((await probeVideo(parallel)).frameCount).toBe(EXPECTED_FRAMES);
       } finally {
         await rm(dir, { recursive: true, force: true });
       }
@@ -551,6 +591,92 @@ describe("renderComposition (e2e)", () => {
       } finally {
         await browser.close();
         server.stop();
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "fixture-video seeks <video> and releases the seeked handle",
+    async () => {
+      await requireStudioBuild();
+
+      /*
+       * A real seekable media file, written into the build directory because the
+       * composition host serves assets from there. VP9/WebM rather than H.264:
+       * Playwright's Chromium ships the open codecs, not the proprietary ones.
+       * `-g 1` makes every frame a keyframe so a seek does not depend on which
+       * keyframe precedes it.
+       *
+       * Nothing is committed: ffmpeg generates the fixture on demand and the
+       * `finally` below removes it.
+       */
+      const videoPath = join(BUILD_DIR, "fixture-video-seek.webm");
+      const generated = Bun.spawn(
+        [
+          "ffmpeg",
+          "-y",
+          "-loglevel",
+          "error",
+          "-f",
+          "lavfi",
+          "-i",
+          "testsrc=size=320x240:rate=30:duration=2",
+          "-c:v",
+          "libvpx-vp9",
+          "-b:v",
+          "0",
+          "-crf",
+          "30",
+          "-g",
+          "1",
+          "-an",
+          videoPath,
+        ],
+        { stdin: "ignore", stdout: "ignore", stderr: "pipe" },
+      );
+      const stderr = await new Response(generated.stderr).text();
+      const exitCode = await generated.exited;
+
+      if (exitCode !== 0) {
+        throw new Error(`could not generate the video fixture (ffmpeg ${exitCode}): ${stderr}`);
+      }
+
+      const size = { width: 1920, height: 1080 };
+      const server = await serveBuild(BUILD_DIR, 0);
+      const browser = await launchBrowser();
+
+      try {
+        const context = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
+
+        try {
+          const page = await context.newPage();
+          await openComposition(page, server.url, "fixture-video", undefined, 30_000);
+
+          // Frame 0 is the loaded frame; frame 15 forces a real `currentTime`
+          // write. `captureFrame` awaits readiness, and `<Video>` keeps a
+          // delayRender handle open from the seek until `seeked` fires — so
+          // returning here at all proves the seeked path ran.
+          const frame0 = await captureFrame(page, 0, size, 30_000, "fixture-video");
+          const frame15 = await captureFrame(page, 15, size, 30_000, "fixture-video");
+
+          // Read the element back: `seeked` firing is not enough if the browser
+          // clamped the target. 15 / 30 fps = 0.5 s.
+          const currentTime = await page.evaluate(
+            () => document.querySelector("video")?.currentTime ?? -1,
+          );
+          expect(currentTime).toBeCloseTo(0.5, 2);
+
+          // The video is the only animated thing in this composition, so a
+          // differing screenshot is proof the pixels followed the seek.
+          expect(Buffer.compare(Buffer.from(frame0), Buffer.from(frame15))).not.toBe(0);
+        } finally {
+          await context.close();
+        }
+      } finally {
+        await browser.close();
+        server.stop();
+        await rm(videoPath, { force: true });
       }
     },
     TIMEOUT_MS,
