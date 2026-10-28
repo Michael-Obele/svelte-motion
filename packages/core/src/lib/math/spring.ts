@@ -251,6 +251,13 @@ export const measureSpring = ({
 
   assertFps(fps, "measureSpring()");
 
+  // A spring with no restoring force never moves, so it is at rest on frame 0.
+  // Without this guard omega0 is 0 and the damping ratio is infinity, which
+  // turns every step into NaN and makes the settle loop unbounded.
+  if (resolveConfig(config).stiffness <= 0) {
+    return 0;
+  }
+
   let frame = 0;
   const calc = () => springCalculation({ fps, frame, config });
   const calcDifference = (animation: AnimationNode) =>
@@ -332,6 +339,19 @@ export const spring = ({
 
   assertFps(fps, "spring()");
 
+  const resolvedConfig = resolveConfig(config);
+
+  // Degenerate springs are already at rest. Zero stiffness has no restoring
+  // force (omega0 = 0, so the damping ratio is infinite), and a zero rest
+  // threshold measures an infinite natural duration; either one turns the
+  // frame loop into an unbounded calculation rather than an animation.
+  if (
+    resolvedConfig.stiffness <= 0 ||
+    (durationRestThreshold !== undefined && durationRestThreshold <= 0)
+  ) {
+    return to;
+  }
+
   const needsToCalculateNaturalDuration = reverse || typeof passedDurationInFrames !== "undefined";
 
   const naturalDuration = needsToCalculateNaturalDuration
@@ -365,11 +385,14 @@ export const spring = ({
 
   const spr = springCalculation({ fps, frame: durationProcessed, config });
 
-  const inner = config.overshootClamping
-    ? to >= from
-      ? Math.min(spr.current, to)
-      : Math.max(spr.current, to)
-    : spr.current;
+  // Clamp after scaling, not before: `spr.current` is normalised to 0..1, so
+  // comparing it against a custom `to` (say 100) never clamps anything.
+  const scaled =
+    from === 0 && to === 1 ? spr.current : interpolate(spr.current, [0, 1], [from, to]);
 
-  return from === 0 && to === 1 ? inner : interpolate(inner, [0, 1], [from, to]);
+  if (!config.overshootClamping) {
+    return scaled;
+  }
+
+  return to >= from ? Math.min(scaled, to) : Math.max(scaled, to);
 };

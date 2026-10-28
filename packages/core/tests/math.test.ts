@@ -912,6 +912,44 @@ describe("measureSpring", () => {
   });
 });
 
+describe("spring degenerate parameters", () => {
+  test("clamps overshoot after scaling to a non-0/1 range", () => {
+    const unclamped = spring({ fps: 30, frame: 15, from: 20, to: 100 });
+    const clamped = spring({
+      fps: 30,
+      frame: 15,
+      from: 20,
+      to: 100,
+      config: { overshootClamping: true },
+    });
+
+    expect(unclamped).toBeGreaterThan(100);
+    expect(clamped).toBe(100);
+
+    // A descending range overshoots past `to` in the other direction.
+    const descending = spring({ fps: 30, frame: 15, from: 100, to: -50 });
+    const descendingClamped = spring({
+      fps: 30,
+      frame: 15,
+      from: 100,
+      to: -50,
+      config: { overshootClamping: true },
+    });
+
+    expect(descending).toBeLessThan(-50);
+    expect(descendingClamped).toBe(-50);
+  });
+
+  test("zero stiffness returns the resting value instead of spinning", () => {
+    expect(spring({ fps: 30, frame: 10, from: 20, to: 100, config: { stiffness: 0 } })).toBe(100);
+    expect(measureSpring({ fps: 30, config: { stiffness: 0 } })).toBe(0);
+  });
+
+  test("zero rest threshold returns the resting value instead of an infinite loop", () => {
+    expect(spring({ fps: 30, frame: 10, durationInFrames: 30, durationRestThreshold: 0 })).toBe(1);
+  });
+});
+
 /* ========================================================================== */
 /* bezier                                                                     */
 /* ========================================================================== */
