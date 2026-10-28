@@ -1,6 +1,8 @@
 # svelte-motion
 
-![svelte-motion banner](assets/banner.svg)
+![svelte-motion — videos as Svelte components, with a playhead sweeping a timeline](assets/banner.gif)
+
+That banner is not an image somebody drew. It is the [`banner`](examples/src/lib/compositions/banner/) composition, rendered by `svelte-motion render` into [`assets/banner.mp4`](assets/banner.mp4) (28 KB, 1280×400, 30fps, 3 s), and the GIF above is the same frames — GitHub strips `<video>` from markdown, so a GIF is the only format that will loop in a README.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=flat-square&logo=svelte&logoColor=white)](https://svelte.dev)
@@ -140,8 +142,8 @@ Full API references live in the package READMEs: [core](packages/core/README.md)
 
 ## Examples
 
-Seven runnable compositions live in [`examples/`](examples/README.md). Four use scoped
-CSS, three use Tailwind, and together they cover every timeline primitive:
+Eight runnable compositions live in [`examples/`](examples/README.md). Five use scoped
+CSS, three use Tailwind, and between them they cover every timeline primitive:
 
 - `title-card`: spring entrance, a rule that draws, staged timing with `Sequence`
 - `lower-third`: a graphic sliding in and out inside one `Sequence`
@@ -150,6 +152,8 @@ CSS, three use Tailwind, and together they cover every timeline primitive:
 - `stat-grid` (Tailwind): cards on a grid, staggered springs, numbers that count up
 - `quote-series` (Tailwind): `Series` stepping through a quote, one line at a time
 - `loop-ticker` (Tailwind): `Loop` driving an endless ticker with no timer
+- `banner`: one inline SVG, a playhead sweeping a timeline — rendered to `assets/banner.gif`
+  and `assets/banner.mp4`
 
 Run everything from the repository root. The examples live in their own SvelteKit app, which
 installs `@svelte-motion/core` from the package — the same setup you would have after
@@ -182,7 +186,7 @@ packages/renderer   @svelte-motion/renderer  node only: serve, capture, encode
 packages/cli        @svelte-motion/cli       render and list commands
 apps/studio         authoring host for the studio's own fixtures + the render gates
 apps/web            landing page
-examples            a normal SvelteKit app: 7 compositions, a gallery, and the render hosts
+examples            a normal SvelteKit app: 8 compositions, a gallery, and the render hosts
 tools/spike         determinism and parity gates
 ```
 

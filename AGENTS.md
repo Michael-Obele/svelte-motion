@@ -50,7 +50,7 @@ packages/renderer/   # @svelte-motion/renderer  node-only: browser.ts, ffmpeg.ts
 packages/cli/        # @svelte-motion/cli       bin; standalone executable later via pack.exe
 apps/studio/         # SvelteKit authoring host: its own fixtures + /render + /player for the gates
 apps/web/            # homepage + docs (SvelteKit + shadcn-svelte)
-examples/            # SvelteKit app the way a user writes one: 7 compositions + gallery + hosts
+examples/            # SvelteKit app the way a user writes one: 8 compositions + gallery + hosts
 ```
 
 The split is a hard boundary, not tidiness: the renderer shells out to Playwright and FFmpeg, so
@@ -74,7 +74,7 @@ The two apps resolve `@svelte-motion/core` differently **on purpose**:
 Workspace commands (`vp` is Vite+, `vpr` is `vp run`):
 
 ```bash
-bun run dev            # the examples app: gallery + Studio, all 7 compositions
+bun run dev            # the examples app: gallery + Studio, all 8 compositions
 bun run dev:studio     # the fixture harness (hello-world + fixture-*), for gate work
 vp run -r build        # recursive, cache-aware build of every member (dependency order)
 vp run studio#dev      # one member by package name

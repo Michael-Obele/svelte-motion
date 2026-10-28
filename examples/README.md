@@ -1,6 +1,6 @@
 # Examples
 
-Seven compositions, in a **normal SvelteKit app**. This is the setup you have after
+Eight compositions, in a **normal SvelteKit app**. This is the setup you have after
 `bun add @svelte-motion/core @svelte-motion/studio-ui`: a scaffolded Kit project, Tailwind,
 and a `src/lib/compositions` folder you own.
 
@@ -9,15 +9,16 @@ resolves through the real `exports` map to `dist` — which means a broken `expo
 a missing `.d.ts` fails here and nowhere else. `apps/studio` aliases core to source instead,
 so the two apps exercise opposite halves of the package.
 
-| Id              | Frames | Styling  | What it shows                                                                                                |
-| --------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `title-card`    | 90     | scoped   | Spring entrance, a rule that draws with `interpolate`, staged timing with `Sequence`, and a timed exit       |
-| `lower-third`   | 120    | scoped   | A graphic sliding in and out inside one `Sequence`, with the exit computed from the local frame              |
-| `image-gallery` | 120    | scoped   | Three images cross-fading, slow scale on each, `prefetch` before the first frame                             |
-| `data-chart`    | 150    | scoped   | Bars from a JSON file fetched under `delayRender`, staggered springs, counted labels, a valibot props schema |
-| `stat-grid`     | 120    | Tailwind | Four cards on a grid, staggered springs, numbers that count up                                               |
-| `quote-series`  | 150    | Tailwind | `Series` stepping through a quote, each item revealing one more line                                         |
-| `loop-ticker`   | 120    | Tailwind | `Loop` driving an endless horizontal ticker with no timer                                                    |
+| Id              | Frames | Styling  | What it shows                                                                                                                                              |
+| --------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title-card`    | 90     | scoped   | Spring entrance, a rule that draws with `interpolate`, staged timing with `Sequence`, and a timed exit                                                     |
+| `lower-third`   | 120    | scoped   | A graphic sliding in and out inside one `Sequence`, with the exit computed from the local frame                                                            |
+| `image-gallery` | 120    | scoped   | Three images cross-fading, slow scale on each, `prefetch` before the first frame                                                                           |
+| `data-chart`    | 150    | scoped   | Bars from a JSON file fetched under `delayRender`, staggered springs, counted labels, a valibot props schema                                               |
+| `stat-grid`     | 120    | Tailwind | Four cards on a grid, staggered springs, numbers that count up                                                                                             |
+| `quote-series`  | 150    | Tailwind | `Series` stepping through a quote, each item revealing one more line                                                                                       |
+| `loop-ticker`   | 120    | Tailwind | `Loop` driving an endless horizontal ticker with no timer                                                                                                  |
+| `banner`        | 90     | scoped   | The svelte-motion banner as one inline SVG, ping-ponging so a loop has no seam; `bun run banner` renders it to `assets/banner.gif` and `assets/banner.mp4` |
 
 ## Layout
 

@@ -23,7 +23,7 @@ change what a gate measures.
 To browse the real compositions, use the examples app instead:
 
 ```bash
-bun run dev        # the examples app: gallery + Studio, all 7 compositions
+bun run dev        # the examples app: gallery + Studio, all 8 compositions
 bun run dev:studio # this app, for gate work
 ```
 

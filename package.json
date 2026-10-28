@@ -16,6 +16,7 @@
     "dev:web": "vp run web#dev",
     "dev:examples": "vp run core#build && vp run examples#dev",
     "build:examples": "vp run -t examples#build",
+    "banner": "bun run build:examples && bun packages/cli/src/index.ts render banner --out assets/banner.gif --build examples/build && bun packages/cli/src/index.ts render banner --out assets/banner.mp4 --build examples/build && cp assets/banner.mp4 apps/web/static/banner.mp4",
     "check:examples": "vp run examples#check",
     "changeset": "changeset",
     "changeset:auto": "bun run tools/release/version-from-commits.ts",
