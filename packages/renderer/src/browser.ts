@@ -52,6 +52,119 @@ type PageBridge = {
 };
 
 /**
+ * The first error a page threw, plus a way to be told the moment it happens.
+ *
+ * A pending wait must reject on that event, not after its own timeout: a page
+ * that throws on load would otherwise burn the full 30 s readiness budget before
+ * anyone noticed. The monitor is attached once, at page creation, because a
+ * listener added after `goto` can miss the error that broke the load.
+ */
+export type PageErrorMonitor = {
+  firstError: () => Error | undefined;
+  /** Calls `listener` immediately when an error already exists. Returns an unsubscribe. */
+  listen: (listener: () => void) => () => void;
+  dispose: () => void;
+};
+
+const pageMonitors = new WeakMap<Page, PageErrorMonitor>();
+
+export const monitorPageErrors = (page: Page, compositionId?: string): PageErrorMonitor => {
+  const existing = pageMonitors.get(page);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  let failure: Error | undefined;
+  const listeners = new Set<() => void>();
+
+  const record = (cause: unknown): void => {
+    if (failure !== undefined) {
+      return;
+    }
+
+    const message = cause instanceof Error ? cause.message : String(cause);
+    const label = compositionId ?? "unknown";
+    failure = new Error(`Composition "${label}" page error: ${message}`, { cause });
+
+    for (const listener of listeners) {
+      listener();
+    }
+    listeners.clear();
+  };
+
+  const onPageError = (error: unknown): void => record(error);
+  page.on("pageerror", onPageError);
+
+  const monitor: PageErrorMonitor = {
+    firstError: () => failure,
+    listen: (listener) => {
+      if (failure !== undefined) {
+        listener();
+
+        return () => {};
+      }
+
+      listeners.add(listener);
+
+      return () => listeners.delete(listener);
+    },
+    dispose: () => {
+      page.off("pageerror", onPageError);
+      listeners.clear();
+    },
+  };
+
+  pageMonitors.set(page, monitor);
+
+  return monitor;
+};
+
+const pageErrorMonitor = (page: Page): PageErrorMonitor | undefined => pageMonitors.get(page);
+
+/**
+ * Races an operation against a timeout and the page's first error.
+ *
+ * `page.evaluate` takes no timeout, so a wedged page would otherwise hang the
+ * caller forever. The error half is what makes an early page failure beat the
+ * clock instead of waiting for it.
+ */
+const withBound = async <T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string,
+  monitor: PageErrorMonitor | undefined,
+): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopListening: (() => void) | undefined;
+
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`${label} did not finish within ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+    const pageError = new Promise<never>((_, reject) => {
+      stopListening = monitor?.listen(() => {
+        reject(monitor?.firstError() ?? new Error(`${label} failed: the page threw`));
+      });
+    });
+    const races: Promise<T>[] = [operation, timeout];
+
+    if (monitor !== undefined) {
+      races.push(pageError);
+    }
+
+    return await Promise.race(races);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    stopListening?.();
+  }
+};
+
+/**
  * Chromium flags that keep two runs of the same frame identical.
  *
  * Text is the one thing that can differ between two runs of the same frame: LCD
@@ -86,34 +199,55 @@ export const waitForReady = async (
   compositionId?: string,
   frame?: number,
 ): Promise<void> => {
+  const label = `Composition "${compositionId ?? "unknown"}" readiness${frame !== undefined ? ` at frame ${frame}` : ""}`;
+  const monitor = pageErrorMonitor(page);
+
   try {
-    await page.waitForFunction(
-      () => (window as unknown as PageBridge).svelteMotion_ready?.() === true,
-      undefined,
-      { timeout: timeoutMs },
+    await withBound(
+      page.waitForFunction(
+        () => (window as unknown as PageBridge).svelteMotion_ready?.() === true,
+        undefined,
+        { timeout: timeoutMs },
+      ),
+      timeoutMs,
+      label,
+      monitor,
     );
   } catch (error) {
+    // A page failure is the real diagnosis; wrapping it as "never reported
+    // ready" would point the caller at delayRender instead of their exception.
+    const pageError = monitor?.firstError();
+
+    if (pageError !== undefined) {
+      throw pageError;
+    }
+
     let pending: string[] = [];
     try {
-      pending = await page.evaluate(() => {
-        const bridge = window as unknown as {
-          svelteMotion_pendingHandles?: () => string[];
-        };
-        try {
-          return bridge.svelteMotion_pendingHandles?.() ?? [];
-        } catch {
-          return [];
-        }
-      });
+      pending = await withBound(
+        page.evaluate(() => {
+          const bridge = window as unknown as {
+            svelteMotion_pendingHandles?: () => string[];
+          };
+          try {
+            return bridge.svelteMotion_pendingHandles?.() ?? [];
+          } catch {
+            return [];
+          }
+        }),
+        timeoutMs,
+        `${label} pending-handle probe`,
+        monitor,
+      );
     } catch {
       pending = [];
     }
     const pendingText =
       pending.length > 0 ? ` pending handles: ${pending.join(", ")}` : " pending handles: (none)";
-    const label = compositionId ?? "unknown";
+    const compositionLabel = compositionId ?? "unknown";
     const frameText = frame !== undefined ? ` at frame ${frame}` : " at frame 0";
     throw new Error(
-      `Composition "${label}" never reported ready within ${timeoutMs}ms${frameText} — ` +
+      `Composition "${compositionLabel}" never reported ready within ${timeoutMs}ms${frameText} — ` +
         `a delayRender() handle is probably still open, or the page failed to load.${pendingText}`,
       { cause: error },
     );
@@ -121,10 +255,22 @@ export const waitForReady = async (
 };
 
 /** Waits for web fonts, which change text metrics and therefore pixels. */
-const waitForFonts = async (page: Page): Promise<void> => {
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-  });
+const waitForFonts = async (
+  page: Page,
+  timeoutMs: number,
+  compositionId?: string,
+  frame?: number,
+): Promise<void> => {
+  const label = `Composition "${compositionId ?? "unknown"}" font wait${frame !== undefined ? ` at frame ${frame}` : ""}`;
+
+  await withBound(
+    page.evaluate(async () => {
+      await document.fonts.ready;
+    }),
+    timeoutMs,
+    label,
+    pageErrorMonitor(page),
+  );
 };
 
 /**
@@ -137,9 +283,17 @@ const waitForFonts = async (page: Page): Promise<void> => {
 const BRIDGE_TIMEOUT_MS = 5_000;
 
 const waitForBridge = async (page: Page): Promise<void> => {
-  await page.waitForFunction(
-    () => typeof (window as unknown as PageBridge).svelteMotion_getCompositions === "function",
-    { timeout: BRIDGE_TIMEOUT_MS },
+  // The options object is the *third* argument: as the second it is passed to
+  // the page function as its argument and no timeout is applied at all.
+  await withBound(
+    page.waitForFunction(
+      () => typeof (window as unknown as PageBridge).svelteMotion_getCompositions === "function",
+      undefined,
+      { timeout: BRIDGE_TIMEOUT_MS },
+    ),
+    BRIDGE_TIMEOUT_MS,
+    "Waiting for the composition registry bridge",
+    pageErrorMonitor(page),
   );
 };
 
@@ -157,6 +311,9 @@ export const gotoComposition = async (
   compositionId: string,
   props?: Record<string, unknown>,
 ): Promise<void> => {
+  // Before navigation, or a page that throws during load can beat the listener.
+  monitorPageErrors(page, compositionId);
+
   const origin = url.replace(/\/+$/, "");
   let target = `${origin}/render?composition=${encodeURIComponent(compositionId)}&frame=0`;
 
@@ -182,7 +339,7 @@ export const waitForReadyAndFonts = async (
   timeoutMs: number,
 ): Promise<void> => {
   await waitForReady(page, timeoutMs, compositionId, 0);
-  await waitForFonts(page);
+  await waitForFonts(page, timeoutMs, compositionId, 0);
 };
 
 /**
@@ -215,6 +372,31 @@ export const hasCompositionBridge = async (page: Page): Promise<boolean> =>
   await page.evaluate(
     () => typeof (window as unknown as PageBridge).svelteMotion_getCompositions === "function",
   );
+
+/**
+ * Waits for the registry bridge and reads it, surfacing page failures.
+ *
+ * `getCompositionsFromPage` alone cannot tell an empty registry from a host that
+ * never booted: both are `[]`. Discovery therefore waits for the bridge and
+ * checks the page error monitor first, so a broken bundle is an error instead of
+ * "no compositions".
+ */
+export const discoverCompositions = async (
+  page: Page,
+  compositionId?: string,
+): Promise<PageComposition[]> => {
+  const monitor = monitorPageErrors(page, compositionId);
+
+  await waitForBridge(page);
+
+  const error = monitor.firstError();
+
+  if (error !== undefined) {
+    throw error;
+  }
+
+  return await getCompositionsFromPage(page);
+};
 
 /** Reads the registry the page publishes, projected to what the renderer needs. */
 export const getCompositionsFromPage = async (page: Page): Promise<PageComposition[]> => {
@@ -251,28 +433,35 @@ export const captureFrame = async (
   timeoutMs: number,
   compositionId?: string,
 ): Promise<Uint8Array> => {
+  const label = `Composition "${compositionId ?? "unknown"}" frame ${frame} seek`;
+
   // The await is the whole point: it resolves after the flush and the paint, so
   // the screenshot below cannot race the previous frame. No `?.()` on the bridge:
   // a missing `setFrame` would make the seek a silent no-op and every frame after
   // the first would be a screenshot of frame 0.
-  await page.evaluate(async (target: number) => {
-    const bridge = window as unknown as PageBridge;
+  await withBound(
+    page.evaluate(async (target: number) => {
+      const bridge = window as unknown as PageBridge;
 
-    if (typeof bridge.svelteMotion_setFrame !== "function") {
-      throw new Error(
-        `frame ${target}: window.svelteMotion_setFrame is not a function — ` +
-          "the composition host never installed its bridge",
-      );
-    }
+      if (typeof bridge.svelteMotion_setFrame !== "function") {
+        throw new Error(
+          `frame ${target}: window.svelteMotion_setFrame is not a function — ` +
+            "the composition host never installed its bridge",
+        );
+      }
 
-    await bridge.svelteMotion_setFrame(target);
-  }, frame);
+      await bridge.svelteMotion_setFrame(target);
+    }, frame),
+    timeoutMs,
+    label,
+    pageErrorMonitor(page),
+  );
 
   // A frame can open new handles (an image that only appears at frame 40), so
   // readiness is re-checked after every seek, not just once at load.
   await waitForReady(page, timeoutMs, compositionId, frame);
 
-  await waitForFonts(page);
+  await waitForFonts(page, timeoutMs, compositionId, frame);
 
   const png = await page.screenshot({
     clip: { x: 0, y: 0, width: size.width, height: size.height },

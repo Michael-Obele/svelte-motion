@@ -10,12 +10,15 @@
  *
  * Two consequences of serving rather than proxying:
  *
- * 1. every request is resolved *under* `buildDir` and an escaping path is
- *    rejected — the server must not be a file-read primitive for `/etc/passwd`;
- * 2. unknown paths fall back to `index.html`, because the studio is a SPA and
- *    `/render?composition=...` exists only on the client.
+ * 1. every request is resolved *under* `buildDir`, both lexically and after
+ *    `realpath`, and an escaping path is rejected — the server must not be a
+ *    file-read primitive for `/etc/passwd` or for a symlink that points outside;
+ * 2. navigation paths fall back to `index.html`, because the studio is a SPA and
+ *    `/render?composition=...` exists only on the client. A missing asset is a
+ *    404, not an HTML page with a 200.
  */
 
+import { realpath } from "node:fs/promises";
 import { normalize, resolve, sep } from "node:path";
 
 /** The only interface this server listens on. */
@@ -31,13 +34,15 @@ export type BuildServer = {
 };
 
 /**
- * Maps a request path onto a path inside `buildDir`.
+ * Maps a request path onto a resolved real path inside `root`.
  *
  * Returns `null` when the path escapes the build directory, which covers `..`
  * segments, absolute paths and encoded variants (`%2e%2e%2f`) — decoding happens
  * *before* the containment check so encoding cannot smuggle a traversal past it.
+ * The realpath check is separate because a symlink inside the root can point
+ * anywhere; a lexical prefix test cannot see that.
  */
-const resolveRequestPath = (buildDir: string, pathname: string): string | null => {
+const resolveRequestPath = async (root: string, pathname: string): Promise<string | null> => {
   let decoded: string;
   try {
     decoded = decodeURIComponent(pathname);
@@ -51,7 +56,6 @@ const resolveRequestPath = (buildDir: string, pathname: string): string | null =
     return null;
   }
 
-  const root = resolve(buildDir);
   // Strip leading separators: an absolute request path must still land under root.
   const relativePath = normalize(decoded).replace(/^[/\\]+/, "");
   const candidate = resolve(root, relativePath);
@@ -60,7 +64,49 @@ const resolveRequestPath = (buildDir: string, pathname: string): string | null =
     return null;
   }
 
-  return candidate;
+  try {
+    const real = await realpath(candidate);
+
+    if (real !== root && !real.startsWith(root + sep)) {
+      return null;
+    }
+
+    return real;
+  } catch {
+    // Missing file, broken symlink, or unreadable parent: nothing to serve.
+    return null;
+  }
+};
+
+/** A last-segment dot means an asset request, not a client-side route. */
+const looksLikeAsset = (pathname: string): boolean => {
+  const segment = pathname.slice(pathname.lastIndexOf("/") + 1);
+
+  return segment.includes(".");
+};
+
+/**
+ * True for a browser navigation (or the root probe), false for fetches and
+ * asset requests. Only navigations may receive the SPA fallback.
+ */
+const isNavigationRequest = (request: Request, pathname: string): boolean => {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return false;
+  }
+
+  // The root is always served, including the server's own startup probe, which
+  // sends no browser Accept header.
+  if (pathname === "/" || pathname.endsWith("/")) {
+    return true;
+  }
+
+  if (looksLikeAsset(pathname)) {
+    return false;
+  }
+
+  const accept = request.headers.get("accept") ?? "";
+
+  return accept.includes("text/html") || request.headers.get("sec-fetch-mode") === "navigate";
 };
 
 /** Polls the origin until it answers, so callers cannot race the first request. */
@@ -92,7 +138,17 @@ const waitUntilAnswering = async (url: string, timeoutMs = 5_000): Promise<void>
  * @returns The origin, the bound port and a `stop()` that tears the server down
  */
 export const serveBuild = async (buildDir: string, port = 4173): Promise<BuildServer> => {
-  const root = resolve(buildDir);
+  const lexicalRoot = resolve(buildDir);
+  let root: string;
+
+  try {
+    // Resolve the root once so a symlinked build directory is compared against
+    // real paths on both sides of the containment check.
+    root = await realpath(lexicalRoot);
+  } catch {
+    root = lexicalRoot;
+  }
+
   const indexFile = Bun.file(resolve(root, "index.html"));
 
   // Checked before binding. Without this the server starts happily, answers every
@@ -109,7 +165,7 @@ export const serveBuild = async (buildDir: string, port = 4173): Promise<BuildSe
     hostname: LOOPBACK,
     fetch: async (request: Request): Promise<Response> => {
       const { pathname } = new URL(request.url);
-      const candidate = pathname.endsWith("/") ? null : resolveRequestPath(root, pathname);
+      const candidate = pathname.endsWith("/") ? null : await resolveRequestPath(root, pathname);
 
       if (candidate !== null) {
         const file = Bun.file(candidate);
@@ -121,9 +177,9 @@ export const serveBuild = async (buildDir: string, port = 4173): Promise<BuildSe
         }
       }
 
-      // SPA fallback: the router runs in the browser, so any unknown path is a
-      // client route (`/render`) rather than a missing file.
-      if (await indexFile.exists()) {
+      // SPA fallback only for navigation. Handing `index.html` to a missing
+      // `/chunk.js` would give the browser HTML with a 200 and fail much later.
+      if (isNavigationRequest(request, pathname) && (await indexFile.exists())) {
         return new Response(indexFile);
       }
 

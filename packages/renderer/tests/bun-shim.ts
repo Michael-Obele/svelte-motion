@@ -191,16 +191,16 @@ const serveShim = (options: ServeShimOptions): ServerShim => {
       // Headers matter to `serve.ts`: SPA fallback keys off `Accept` and
       // `Sec-Fetch-Mode`, so dropping them here would make every navigation
       // look like an asset fetch.
-      const headers = new Headers();
+      const requestHeaders = new Headers();
 
       for (const [name, value] of Object.entries(request.headers)) {
         if (value !== undefined) {
-          headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+          requestHeaders.set(name, Array.isArray(value) ? value.join(", ") : value);
         }
       }
 
       const reply = await options.fetch(
-        new Request(url, { method: request.method ?? "GET", headers }),
+        new Request(url, { method: request.method ?? "GET", headers: requestHeaders }),
       );
       const body = new Uint8Array(await reply.arrayBuffer());
       const headers = Object.fromEntries(reply.headers.entries());

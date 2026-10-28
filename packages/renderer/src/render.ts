@@ -2,15 +2,16 @@
  * The frame loop.
  *
  * This is the piece that turns "a frame is a picture" into a file: serve the
- * built studio, drive headless Chromium to every frame number, keep the PNGs in
- * memory keyed by their absolute frame, then hand the ordered sequence to FFmpeg
- * on stdin.
+ * built studio, drive headless Chromium to every frame number, stream the PNGs
+ * to FFmpeg on stdin, and encode.
  *
  * Three decisions are load-bearing and easy to undo by accident:
  *
- * 1. **Absolute frame slots.** Chunks finish out of order, so the store is a
- *    `Map<number, Uint8Array>` and the encoder receives `0..n-1` rebuilt from it.
- *    Pushing into an array as frames arrive would scramble the video.
+ * 1. **Absolute frame slots.** Chunks finish out of order, so captured frames go
+ *    into a `Map<number, Uint8Array>` reorder buffer and the encoder consumes
+ *    `0..n-1` in ascending order. Pushing into an array as frames arrive would
+ *    scramble the video; holding the whole map until capture finishes would make
+ *    memory scale with the video length.
  * 2. **One context and page per chunk.** A viewport is context state in
  *    Playwright, and the composition's `width`/`height` is the viewport. Sharing a
  *    page between differently-sized chunks would need a resize per frame.
@@ -27,9 +28,11 @@ import {
   gotoComposition,
   hasCompositionBridge,
   launchBrowser,
+  monitorPageErrors,
   openComposition,
   waitForReadyAndFonts,
   type PageComposition,
+  type PageErrorMonitor,
 } from "./browser.ts";
 import { chunkRange } from "./chunks.ts";
 import {
@@ -185,14 +188,28 @@ const resolveComposition = async (
 
   try {
     const page = await context.newPage();
+    const monitor = monitorPageErrors(page, options.compositionId);
     const find = (compositions: readonly PageComposition[]): PageComposition | undefined =>
       compositions.find((composition) => composition.id === options.compositionId);
 
     // Navigate without blocking on readiness — a typo should not cost 30 s.
     await gotoComposition(page, url, options.compositionId, options.props);
 
+    // The probe is the first page to see a broken host. Surface its error before
+    // interpreting an empty registry as "nothing registered".
+    const probeError = monitor.firstError();
+
+    if (probeError !== undefined) {
+      throw probeError;
+    }
+
     // Check the registry before waiting: unknown ids fail instantly.
     const available = await getCompositionsFromPage(page);
+    const readError = monitor.firstError();
+
+    if (readError !== undefined) {
+      throw readError;
+    }
 
     if (available.length === 0 && !(await hasCompositionBridge(page))) {
       throw pageNeverBooted(options.buildDir, url);
@@ -252,9 +269,10 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
   // Warnings collected from every page; deduped and capped at 50.
   const warnings: string[] = [];
   const warningsSet = new Set<string>();
-  let pageError: Error | undefined;
+  const monitors: PageErrorMonitor[] = [];
 
   const attachDiagnostics = (page: import("playwright").Page, compositionId: string): void => {
+    monitors.push(monitorPageErrors(page, compositionId));
     page.on("console", (msg) => {
       const text = msg.text();
       if (text.startsWith("[svelte-motion]")) {
@@ -264,17 +282,15 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
         }
       }
     });
-    page.on("pageerror", (error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      pageError = new Error(`Composition "${compositionId}" page error: ${message}`, {
-        cause: error,
-      });
-    });
   };
 
   const checkPageError = (): void => {
-    if (pageError !== undefined) {
-      throw pageError;
+    for (const monitor of monitors) {
+      const error = monitor.firstError();
+
+      if (error !== undefined) {
+        throw error;
+      }
     }
   };
 
@@ -290,8 +306,8 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
       const total = config.durationInFrames;
       const size = { width: config.width, height: config.height };
 
-      const assertNotAborted = (): void => {
-        if (options.signal?.aborted === true) {
+      const assertNotAborted = (internal?: AbortSignal): void => {
+        if (options.signal?.aborted === true || internal?.aborted === true) {
           const aborted = new Error(`Render of "${config.id}" was cancelled`);
           aborted.name = "AbortError";
           throw aborted;
@@ -312,16 +328,16 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
       };
 
       /*
-       * Two capture strategies, chosen by concurrency.
+       * Two capture strategies, chosen by concurrency. Both stream to FFmpeg;
+       * neither waits for the last frame before writing the first.
        *
-       * `concurrency === 1` streams: one page, frames captured and pushed to
-       * FFmpeg in order, so peak memory is one PNG rather than the whole video.
-       * This is the default and the only path that survives a long render.
+       * `concurrency === 1` is the simple path: one page, frames captured and
+       * pushed in order, so peak memory is one PNG.
        *
-       * Higher concurrency has chunks finishing out of order, so frames must be
-       * reordered before they can be written — that needs the whole set in
-       * memory. Kept deliberately: it is a speed knob, and the memory ceiling is
-       * the price (ponytail: reorder buffer, add when parallel renders matter).
+       * Higher concurrency has chunks finishing out of order. A bounded reorder
+       * buffer holds early frames until their turn, and the generator deletes
+       * each one as FFmpeg consumes it. The window is what keeps one fast chunk
+       * from buffering the rest of the video.
        */
       let frameCount: number;
 
@@ -350,15 +366,45 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
           }
         }
 
-        await encodeWithFFmpeg(sequentialFrames(), encodeOptions);
+        await encodeWithFFmpeg(sequentialFrames(), encodeOptions, options.signal);
         frameCount = total;
       } else {
         // Keyed by absolute frame: chunk completion order is an implementation
         // detail that must not reach the encoder.
-        const captures = new Map<number, Uint8Array>();
+        const buffered = new Map<number, Uint8Array>();
+        const waiters: Array<() => void> = [];
+        const wake = (): void => {
+          for (const resolve of waiters.splice(0)) {
+            resolve();
+          }
+        };
+        const waitUntil = async (condition: () => boolean): Promise<void> => {
+          while (!condition()) {
+            await new Promise<void>((resolve) => waiters.push(resolve));
+          }
+        };
+
+        // Total frames waiting for their turn. This is a count, not a distance:
+        // chunks may finish far out of order, but never buffer more than this
+        // many PNGs. Without the cap a chunk that wins the race could hold the
+        // whole video.
+        const maxBuffered = Math.max(4, concurrency * 8);
+        let nextFrame = 0;
         let done = 0;
 
-        await Promise.all(
+        // Internal cancellation: a failed worker or encoder stops the other side
+        // instead of letting it keep capturing frames nobody will encode.
+        const cancel = new AbortController();
+        const forwardAbort = (): void => {
+          cancel.abort();
+          wake();
+        };
+        options.signal?.addEventListener("abort", forwardAbort, { once: true });
+
+        let workerFailure: unknown;
+        let encoderFailure: unknown;
+
+        const workers = Promise.all(
           chunkRange(0, total, concurrency).map(async (chunk) => {
             const context = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
 
@@ -366,40 +412,86 @@ export const renderComposition = async (options: RenderOptions): Promise<RenderR
               const page = await context.newPage();
               attachDiagnostics(page, config.id);
               await openComposition(page, server.url, config.id, options.props, readyTimeoutMs);
+              assertNotAborted(cancel.signal);
               checkPageError();
 
               for (let frame = chunk.start; frame < chunk.end; frame += 1) {
-                assertNotAborted();
-
-                captures.set(
-                  frame,
-                  await captureFrame(page, frame, size, readyTimeoutMs, config.id),
+                assertNotAborted(cancel.signal);
+                // Always let the worker that owns `nextFrame` through, even when
+                // the buffer is full: it is the only one that can unblock the
+                // encoder, so blocking it would deadlock every worker.
+                await waitUntil(
+                  () => cancel.signal.aborted || frame === nextFrame || buffered.size < maxBuffered,
                 );
+                assertNotAborted(cancel.signal);
+
+                const png = await captureFrame(page, frame, size, readyTimeoutMs, config.id);
+                assertNotAborted(cancel.signal);
                 checkPageError();
+                buffered.set(frame, png);
                 done += 1;
                 options.onProgress?.(done, total);
+                wake();
               }
             } finally {
               await context.close();
             }
           }),
-        );
-
-        checkPageError();
-
-        // Rebuilt in ascending order — this is the video.
-        const frames = Array.from({ length: total }, (_, frame) => {
-          const png = captures.get(frame);
-
-          if (png === undefined) {
-            throw new Error(`Frame ${frame} of "${config.id}" was never captured`);
-          }
-
-          return png;
+        ).catch((error: unknown) => {
+          workerFailure = error;
+          cancel.abort();
+          wake();
+          throw error;
         });
 
-        await encodeWithFFmpeg(frames, encodeOptions);
-        frameCount = frames.length;
+        async function* orderedFrames(): AsyncGenerator<Uint8Array> {
+          for (let frame = 0; frame < total; frame += 1) {
+            await waitUntil(() => buffered.has(frame) || cancel.signal.aborted);
+            assertNotAborted(cancel.signal);
+
+            const png = buffered.get(frame);
+
+            if (png === undefined) {
+              throw new Error(`Frame ${frame} of "${config.id}" was never captured`);
+            }
+
+            // Released before the yield: once FFmpeg has the bytes there is no
+            // reason to keep the PNG alive.
+            buffered.delete(frame);
+            nextFrame = frame + 1;
+            wake();
+            yield png;
+          }
+        }
+
+        const encoder = encodeWithFFmpeg(orderedFrames(), encodeOptions, cancel.signal).catch(
+          (error: unknown) => {
+            encoderFailure = error;
+            cancel.abort();
+            wake();
+            throw error;
+          },
+        );
+
+        const results = await Promise.allSettled([workers, encoder]);
+        options.signal?.removeEventListener("abort", forwardAbort);
+
+        // A cancellation-driven AbortError is the symptom, not the cause: when
+        // one side really failed, report that instead of "aborted".
+        const failures = [workerFailure, encoderFailure].filter(
+          (failure): failure is Error => failure instanceof Error && failure.name !== "AbortError",
+        );
+        const rejected = results.find(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+        const failure = failures[0] ?? rejected?.reason;
+
+        if (failure !== undefined) {
+          throw failure;
+        }
+
+        checkPageError();
+        frameCount = total;
       }
 
       checkPageError();

@@ -12,15 +12,18 @@ export {
   captureFrame,
   CHROMIUM_DETERMINISM_FLAGS,
   DEFAULT_READY_TIMEOUT_MS,
+  discoverCompositions,
   getCompositionsFromPage,
   gotoComposition,
   hasCompositionBridge,
   launchBrowser,
+  monitorPageErrors,
   openComposition,
   waitForReady,
   waitForReadyAndFonts,
   type FrameSize,
   type PageComposition,
+  type PageErrorMonitor,
 } from "./browser.ts";
 export {
   buildFfmpegArgs,

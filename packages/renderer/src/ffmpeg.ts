@@ -7,6 +7,8 @@
  * saves writing thousands of intermediate files.
  */
 
+import { rm } from "node:fs/promises";
+
 /** The container families the encoder can write. */
 export type OutputFormat = "mp4" | "webm" | "gif";
 
@@ -136,6 +138,13 @@ const stdinArgs = (fps: number): string[] => [
  */
 const BITEXACT_ARGS = ["-map_metadata", "-1", "-fflags", "+bitexact", "-flags:v", "+bitexact"];
 
+/**
+ * `--` ends FFmpeg's option parsing, so an output called `-y.mp4` is a filename
+ * rather than another flag. Verified against ffmpeg 6.1.1: it writes the file
+ * and exits 0 with the separator in place.
+ */
+const outputArgs = (options: EncodeOptions): string[] => ["--", options.out];
+
 /** H.264 in an MP4, MOV or Matroska container. The default and the well-trodden path. */
 const buildMp4Args = (options: EncodeOptions): string[] => {
   const { crf = 18, codec = "libx264", preset = "medium" } = options;
@@ -151,7 +160,7 @@ const buildMp4Args = (options: EncodeOptions): string[] => {
     "-preset",
     preset,
     ...BITEXACT_ARGS,
-    options.out,
+    ...outputArgs(options),
   ];
 };
 
@@ -176,7 +185,7 @@ const buildWebmArgs = (options: EncodeOptions): string[] => [
   "-crf",
   String(options.crf ?? VP9_CRF),
   ...BITEXACT_ARGS,
-  options.out,
+  ...outputArgs(options),
 ];
 
 /**
@@ -237,7 +246,7 @@ const buildGifArgs = (options: EncodeOptions): string[] => [
   "-loop",
   "0",
   ...BITEXACT_ARGS,
-  options.out,
+  ...outputArgs(options),
 ];
 
 /**
@@ -279,6 +288,13 @@ export const checkFfmpeg = async (): Promise<boolean> => {
   }
 };
 
+const abortError = (): Error => {
+  const error = new Error("ffmpeg encode was cancelled");
+  error.name = "AbortError";
+
+  return error;
+};
+
 /**
  * Encodes PNG frames into `options.out`.
  *
@@ -289,17 +305,29 @@ export const checkFfmpeg = async (): Promise<boolean> => {
  * long render flat in memory: frames reach FFmpeg as they are captured instead
  * of all being held until the last one finishes.
  *
- * @throws When FFmpeg exits non-zero, with the tail of its stderr
+ * @param signal - Stops the frame loop, kills the encoder and waits for it to
+ *   exit; a partial output file is removed before the error is thrown
+ * @throws When FFmpeg exits non-zero or the write path fails, with the tail of
+ *   its stderr
  */
 export const encodeWithFFmpeg = async (
   frames: Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
   options: EncodeOptions,
+  signal?: AbortSignal,
 ): Promise<void> => {
   // An empty array is knowable up front, so fail before spawning FFmpeg. An
   // iterable only reveals emptiness after iterating, hence the check after the
   // loop below.
   if (Array.isArray(frames) && frames.length === 0) {
     throw new Error("encodeWithFFmpeg() needs at least one frame");
+  }
+
+  // Read through a function: the compiler narrows a direct `signal?.aborted`
+  // check, but an AbortSignal can flip at any later moment.
+  const isAborted = (): boolean => signal?.aborted === true;
+
+  if (isAborted()) {
+    throw abortError();
   }
 
   const proc = Bun.spawn(["ffmpeg", ...buildFfmpegArgs(options)], {
@@ -312,11 +340,64 @@ export const encodeWithFFmpeg = async (
   // a full pipe buffer would block it mid-encode while we block on stdin — a
   // deadlock that looks exactly like a hung render.
   const stderrText = new Response(proc.stderr).text();
+  const kill = (): void => {
+    try {
+      proc.kill();
+    } catch {
+      // Already gone: waiting on `exited` below is still the right thing to do.
+    }
+  };
+  const onAbort = (): void => kill();
+
+  signal?.addEventListener("abort", onAbort, { once: true });
 
   let wrote = 0;
+  // Wrapping gives the manual `next()` below one iterator type for arrays and
+  // async generators alike; `return()` also forwards to the source generator.
+  const iterator = (async function* (): AsyncGenerator<Uint8Array> {
+    yield* frames;
+  })();
+
+  /**
+   * `iterator.next()` on its own cannot be cancelled. Racing it with the abort
+   * event means an encoder failure or Ctrl+C stops the loop even while the
+   * caller is still producing the next frame.
+   */
+  const nextFrame = async (): Promise<IteratorResult<Uint8Array>> => {
+    if (isAborted()) {
+      throw abortError();
+    }
+
+    if (signal === undefined) {
+      return await iterator.next();
+    }
+
+    let remove = (): void => {};
+
+    try {
+      return await Promise.race([
+        iterator.next(),
+        new Promise<never>((_, reject) => {
+          const onAbortSignal = (): void => reject(abortError());
+          signal.addEventListener("abort", onAbortSignal, { once: true });
+          remove = () => signal.removeEventListener("abort", onAbortSignal);
+        }),
+      ]);
+    } finally {
+      remove();
+    }
+  };
 
   try {
-    for await (const frame of frames) {
+    for (;;) {
+      const next = await nextFrame();
+
+      if (next.done === true) {
+        break;
+      }
+
+      const frame = next.value;
+
       // Awaited so backpressure is respected: the sink reports a promise when its
       // buffer is full, and ignoring it would queue the whole render in memory.
       await proc.stdin.write(frame);
@@ -332,18 +413,49 @@ export const encodeWithFFmpeg = async (
 
     await proc.stdin.end();
   } catch (error) {
-    proc.kill();
-    // The stderr drain started above is still pending and the stream is about to
-    // die with the process. Settling it here keeps the write error below from
-    // being followed by an unhandled rejection nobody asked for.
-    void stderrText.catch(() => "");
-    throw error;
+    // Best effort: lets the source generator run its `finally` (closing its page)
+    // without blocking the error path on a capture that is still in flight.
+    void iterator.return(undefined);
+    // The iteration above closed the frame generator. Now stop the encoder, wait
+    // for it to actually exit, and only then read stderr: a live process can
+    // still be flushing the lines that explain the failure.
+    kill();
+    await proc.exited;
+    const stderr = await stderrText.catch(() => "");
+    await rm(options.out, { force: true }).catch(() => {});
+    const failure = isAborted() ? abortError() : error;
+    const reason = failure instanceof Error ? failure.message : String(failure);
+    const detail = stderr.slice(-STDERR_TAIL).trim();
+
+    const wrapped = new Error(
+      `ffmpeg encode failed after ${wrote} frame${wrote === 1 ? "" : "s"}: ${reason}` +
+        (detail.length > 0 ? `\nffmpeg stderr:\n${detail}` : ""),
+      { cause: failure },
+    );
+
+    if (failure instanceof Error && failure.name === "AbortError") {
+      wrapped.name = "AbortError";
+    }
+
+    throw wrapped;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
   }
 
   const exitCode = await proc.exited;
   const stderr = await stderrText;
 
+  if (isAborted()) {
+    await rm(options.out, { force: true }).catch(() => {});
+
+    throw abortError();
+  }
+
   if (exitCode !== 0) {
+    // A failed encode leaves a partial container. Removing it means a caller
+    // cannot mistake the broken file for a finished render.
+    await rm(options.out, { force: true }).catch(() => {});
+
     throw new Error(`ffmpeg exited with code ${exitCode}: ${stderr.slice(-STDERR_TAIL).trim()}`);
   }
 };

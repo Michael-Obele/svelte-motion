@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -307,6 +307,30 @@ describe("CLI e2e", () => {
       expect(result.stdout).toMatch(/fixture-font-heavy/);
       expect(result.stdout).toMatch(/fixture-missing-asset/);
       expect(result.stdout).toMatch(/fixture-stuck/);
+    },
+    TIMEOUT_MS,
+  );
+
+  e2e(
+    "list fails on a host that throws instead of reporting an empty registry",
+    async () => {
+      const dir = await makeTempDir();
+
+      try {
+        await writeFile(
+          join(dir, "index.html"),
+          "<!doctype html><script>throw new Error('broken-host-fixture')</script>",
+        );
+
+        const result = await spawnCli(["list", "--build", dir]);
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toMatch(/error:/);
+        expect(result.stderr).toMatch(/broken-host-fixture/);
+        expect(result.stdout).not.toMatch(/No compositions found/);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
     },
     TIMEOUT_MS,
   );

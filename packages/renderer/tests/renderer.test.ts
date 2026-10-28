@@ -14,11 +14,22 @@
  * — against the real `ffmpeg` binary on this machine.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
-import { buildFfmpegArgs, checkFfmpeg, encodeWithFFmpeg, inferOutputFormat } from "../src/index.ts";
+import {
+  buildFfmpegArgs,
+  captureFrame,
+  checkFfmpeg,
+  encodeWithFFmpeg,
+  inferOutputFormat,
+  monitorPageErrors,
+  serveBuild,
+  waitForReady,
+} from "../src/index.ts";
 import { installBunShim } from "./bun-shim.ts";
 
 beforeAll(() => {
@@ -150,6 +161,98 @@ describe("format selection", () => {
     expect(args).toContain("-vf");
     expect(args.at(-1)).toBe("out/a.mp4");
   });
+
+  test("separates an output name that starts with a dash from the options", () => {
+    // Without the separator ffmpeg reads `-y.mp4` as a flag and the render dies
+    // at the last step. `--` ends option parsing; verified against ffmpeg 6.1.1.
+    const args = buildFfmpegArgs({ out: "-y.mp4", fps: 30 });
+
+    expect(args.slice(-2)).toEqual(["--", "-y.mp4"]);
+  });
+});
+
+describe("bounded page waits", () => {
+  test("a seek that never settles times out naming the frame", async () => {
+    const page = {
+      evaluate: () => new Promise<never>(() => {}),
+      screenshot: async () => new Uint8Array(),
+    } as unknown as Page;
+
+    await expect(captureFrame(page, 7, { width: 16, height: 16 }, 50, "stuck")).rejects.toThrow(
+      /frame 7 seek did not finish within 50ms/,
+    );
+  });
+
+  test("a page error rejects a pending readiness wait without burning the timeout", async () => {
+    const emitter = new EventEmitter();
+    const page = Object.assign(emitter, {
+      waitForFunction: () => new Promise<never>(() => {}),
+      evaluate: () => new Promise<never>(() => {}),
+    }) as unknown as Page;
+    monitorPageErrors(page, "broken");
+
+    const started = performance.now();
+    const ready = waitForReady(page, 30_000, "broken", 5);
+
+    emitter.emit("pageerror", new Error("boom"));
+
+    await expect(ready).rejects.toThrow(/page error: boom/);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});
+
+describe("serveBuild containment and fallback", () => {
+  const makeSite = async (): Promise<{ root: string; outside: string; parent: string }> => {
+    const parent = await makeTempDir();
+    const root = join(parent, "build");
+    const outside = join(parent, "outside");
+
+    await mkdir(root);
+    await mkdir(outside);
+    await writeFile(join(root, "index.html"), "<!doctype html><title>spa</title>");
+
+    return { parent, root, outside };
+  };
+
+  test("does not serve a symlink that escapes the build directory", async () => {
+    const { root, outside } = await makeSite();
+    const secret = "escaped-secret";
+    await writeFile(join(outside, "secret.txt"), secret);
+    await symlink(join(outside, "secret.txt"), join(root, "leak.txt"));
+
+    const server = await serveBuild(root, 0);
+
+    try {
+      const response = await fetch(`${server.url}/leak.txt`);
+
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toContain(secret);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("returns 404 for a missing asset but the SPA shell for a navigation", async () => {
+    const { root } = await makeSite();
+    const server = await serveBuild(root, 0);
+
+    try {
+      const asset = await fetch(`${server.url}/missing.png`);
+      expect(asset.status).toBe(404);
+
+      const navigation = await fetch(`${server.url}/render`, {
+        headers: { accept: "text/html" },
+      });
+      expect(navigation.status).toBe(200);
+      expect(await navigation.text()).toContain("spa");
+
+      // An extensionless fetch is not a navigation, so it must not get HTML.
+      const fetchRoute = await fetch(`${server.url}/render`);
+      expect(fetchRoute.status).toBe(404);
+    } finally {
+      server.stop();
+    }
+  });
 });
 
 describe("gif encoding", () => {
@@ -233,9 +336,13 @@ describe("encodeWithFFmpeg", () => {
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
       ]);
 
-      await expect(
-        encodeWithFFmpeg([bogus], { out: join(dir, "garbage.mp4"), fps: 30 }),
-      ).rejects.toThrow(/ffmpeg exited with code/);
+      const out = join(dir, "garbage.mp4");
+
+      await expect(encodeWithFFmpeg([bogus], { out, fps: 30 })).rejects.toThrow(
+        /ffmpeg exited with code/,
+      );
+      // A failed encode must not leave a partial container behind.
+      expect(await Bun.file(out).exists()).toBe(false);
     },
     // Generous: proves the spawn+stderr path terminates instead of hanging on a
     // half-closed pipe.
@@ -246,6 +353,40 @@ describe("encodeWithFFmpeg", () => {
     await expect(encodeWithFFmpeg([], { out: "unused.mp4", fps: 30 })).rejects.toThrow(
       /at least one frame/,
     );
+  });
+
+  test("a failing frame source stops the encoder and removes the partial output", async () => {
+    const dir = await makeTempDir();
+    const frame = await makePngFrame(dir);
+    const out = join(dir, "partial.mp4");
+
+    async function* failingFrames(): AsyncGenerator<Uint8Array> {
+      yield frame;
+      throw new Error("capture exploded");
+    }
+
+    await expect(encodeWithFFmpeg(failingFrames(), { out, fps: 30 })).rejects.toThrow(
+      /capture exploded/,
+    );
+    expect(await Bun.file(out).exists()).toBe(false);
+  });
+
+  test("aborting awaits the encoder exit and removes the partial output", async () => {
+    const dir = await makeTempDir();
+    const frame = await makePngFrame(dir);
+    const out = join(dir, "aborted.mp4");
+    const controller = new AbortController();
+
+    async function* framesUntilAborted(): AsyncGenerator<Uint8Array> {
+      yield frame;
+      controller.abort();
+      yield frame;
+    }
+
+    await expect(
+      encodeWithFFmpeg(framesUntilAborted(), { out, fps: 30 }, controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(await Bun.file(out).exists()).toBe(false);
   });
 
   test("writes a real GIF when the destination says so", async () => {

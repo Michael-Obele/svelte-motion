@@ -11,8 +11,9 @@
 
 import { BoxRenderable, createCliRenderer, TextRenderable } from "@opentui/core";
 import {
-  getCompositionsFromPage,
+  discoverCompositions,
   launchBrowser,
+  monitorPageErrors,
   renderComposition,
   serveBuild,
   type PageComposition,
@@ -34,26 +35,14 @@ const readCompositions = async (buildDir: string): Promise<PageComposition[]> =>
 
       try {
         const page = await context.newPage();
+        monitorPageErrors(page);
         const origin = server.url.replace(/\/+$/, "");
         await page.goto(`${origin}/render?frame=0`, { waitUntil: "load" });
 
         // The bridge appears during hydration, so reading the registry before
-        // it exists yields an empty list. `list` waits for the same thing.
-        try {
-          await page.waitForFunction(
-            () =>
-              typeof (
-                window as unknown as {
-                  svelteMotion_getCompositions?: unknown;
-                }
-              ).svelteMotion_getCompositions === "function",
-            { timeout: 5000 },
-          );
-        } catch {
-          // The read below reports the real story if it never appears.
-        }
-
-        return await getCompositionsFromPage(page);
+        // it exists yields an empty list. Discovery waits for it and surfaces a
+        // page error instead of reporting a broken host as "no compositions".
+        return await discoverCompositions(page);
       } finally {
         await context.close();
       }

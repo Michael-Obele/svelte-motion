@@ -11,8 +11,9 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import {
-  getCompositionsFromPage,
+  discoverCompositions,
   launchBrowser,
+  monitorPageErrors,
   renderComposition,
   serveBuild,
 } from "@svelte-motion/renderer";
@@ -364,22 +365,15 @@ async function runList(command: ListCommand): Promise<void> {
 
       try {
         const page = await context.newPage();
+        monitorPageErrors(page);
         const origin = server.url.replace(/\/+$/, "");
         const target = `${origin}/render?frame=0`;
         await page.goto(target, { waitUntil: "load" });
 
-        try {
-          await page.waitForFunction(
-            () =>
-              typeof (window as unknown as { svelteMotion_getCompositions?: unknown })
-                .svelteMotion_getCompositions === "function",
-            { timeout: 5000 },
-          );
-        } catch {
-          // Bridge may already be there or may never appear, getCompositions will tell
-        }
-
-        const compositions = await getCompositionsFromPage(page);
+        // Discovery waits for the bridge and rethrows page errors: a broken host
+        // must fail here, not print an empty list that looks like "nothing
+        // registered".
+        const compositions = await discoverCompositions(page);
 
         if (command.json) {
           console.log(JSON.stringify(compositions, null, 2));
