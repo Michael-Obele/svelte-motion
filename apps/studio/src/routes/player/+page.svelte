@@ -12,21 +12,13 @@
      * `@svelte-motion/studio-ui`, which the examples app mounts from an identical
      * route.
      */
-    import {
-        collectCompositions,
-        setSvelteMotionEnvironmentFlag,
-    } from "@svelte-motion/core";
+    import { collectCompositions } from "@svelte-motion/core";
 
     const compositions = collectCompositions(
         import.meta.glob("/src/compositions/*/index.ts", {
             eager: true,
         }) as Record<string, { default?: unknown }>,
     );
-
-    // Set before anything mounts — the same handshake the renderer performs. It has
-    // to happen at module scope: unknown ids never mount a Player, and the flag
-    // still describes the shell they are drawn in.
-    setSvelteMotionEnvironmentFlag("svelteMotion_isPlayer", true);
 
     /** Ids in registration order, for the unknown-composition page. */
     const compositionIds = compositions.map((composition) => composition.id);
@@ -39,6 +31,7 @@
         getComposition,
         getCompositions,
         installReadinessGlobal,
+        setSvelteMotionEnvironmentFlag,
     } from "@svelte-motion/core";
     import { PlayerHost, resolveHostProps } from "@svelte-motion/studio-ui";
 
@@ -62,12 +55,16 @@
     // render can be reproduced from its own page. `installReadinessGlobal` lets a
     // driver poll `window.svelteMotion_ready()`.
     onMount(() => {
+        // The flag describes the mounted surface, so it must not outlive this
+        // route: otherwise navigating to `/render` leaves both flags true.
+        setSvelteMotionEnvironmentFlag("svelteMotion_isPlayer", true);
         installReadinessGlobal();
         const bridge = window as unknown as Record<string, unknown>;
         bridge.svelteMotion_getCompositions = () => getCompositions();
         bridge.svelteMotion_inputProps = host.inputProps;
 
         return () => {
+            setSvelteMotionEnvironmentFlag("svelteMotion_isPlayer", false);
             delete bridge.svelteMotion_getCompositions;
             delete bridge.svelteMotion_inputProps;
             delete bridge.svelteMotion_validationError;

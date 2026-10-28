@@ -23,15 +23,8 @@ export const formatDuration = (frames: number, fps: number): string => {
 /**
  * Clamp a frame into `[0, durationInFrames - 1]`.
  *
- * Mirrors the Player's own clamp so the scrubber can never ask for a frame
- * the Player would reject. Non-finite input becomes frame 0.
+ * Delegates to the one policy in `@svelte-motion/core` so this app cannot drift
+ * from the Player, `MotionRoot` or the host query parser. Non-finite input
+ * becomes frame 0.
  */
-export const clampFrame = (frame: number, durationInFrames: number): number => {
-  if (!Number.isFinite(frame)) {
-    return 0;
-  }
-
-  const max = Math.max(0, durationInFrames - 1);
-
-  return Math.max(0, Math.min(frame, max));
-};
+export { clampFrame } from "@svelte-motion/core";

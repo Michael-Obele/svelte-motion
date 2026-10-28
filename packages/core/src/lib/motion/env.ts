@@ -34,6 +34,9 @@ export const getSvelteMotionEnvironment = (): SvelteMotionEnvironment => ({
  * Sets an environment flag.
  *
  * The renderer calls this with `svelteMotion_isRendering` before navigation.
+ * Passing `false` clears the flag: `getSvelteMotionEnvironment` only treats an
+ * exact `true` as set, so a route can unset its flag on destroy and leave no
+ * stale surface behind.
  */
 export const setSvelteMotionEnvironmentFlag = (name: string, value: boolean): void => {
   if (typeof window === "undefined") {

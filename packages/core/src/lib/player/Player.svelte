@@ -16,7 +16,7 @@
   } from "../motion/context.svelte.js";
   import Stage from "../motion/Stage.svelte";
   import PlayerControls from "./PlayerControls.svelte";
-  import { frameAt, frameElapsedMs } from "./frame-time.js";
+  import { clampFrame, frameAt, frameElapsedMs } from "./frame-time.js";
   import type { PlayerProps } from "./types.js";
 
   let {
@@ -50,11 +50,7 @@
     onFrame,
   }: PlayerProps = $props();
 
-  const clamp = (n: number): number => {
-    if (!Number.isFinite(n)) return 0;
-    const max = Math.max(0, durationInFrames - 1);
-    return Math.max(0, Math.min(n, max));
-  };
+  const clamp = (n: number): number => clampFrame(n, durationInFrames);
 
   const context = untrack(
     () => new MotionContext({ fps, width, height, durationInFrames }),

@@ -58,6 +58,12 @@
         error = formatIssues(result.issues);
         return;
       }
+
+      // Use the validated output: transforms and schema defaults are applied,
+      // so the composition receives exactly what the schema produces.
+      error = undefined;
+      appliedProps = result.output as Record<string, unknown>;
+      return;
     }
 
     error = undefined;

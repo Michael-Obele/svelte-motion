@@ -11,7 +11,7 @@
   import { staticFile } from "../motion/asset.js";
   import type { ImgProps } from "./media.js";
 
-  let { src, alt = "", style = "", ...rest }: ImgProps = $props();
+  let { src, alt = "", style = "", onload, onerror, ...rest }: ImgProps = $props();
 
   const resolvedSrc = $derived.by(() => {
     try {
@@ -38,11 +38,15 @@
   handle = delayRender(`<Img src="${untrack(() => resolvedSrc)}">`);
   settled = false;
 
-  const onLoad = () => settle();
+  const onLoad = (event: Event) => {
+    settle();
+    onload?.(event);
+  };
 
-  const onError = () => {
+  const onError = (event: Event) => {
     console.warn(`[svelte-motion] image failed to load: ${untrack(() => resolvedSrc)}`);
     settle();
+    onerror?.(event);
   };
 
   // If src changes, reopen the handle for the new asset.

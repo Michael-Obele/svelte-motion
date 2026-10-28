@@ -31,21 +31,20 @@
         id !== undefined &&
         compositions.some((composition) => composition.id === id);
 
-    // Init-only reads: the host app decides the opening selection once and owns
-    // the URL from then on, so these must not re-run when props change.
+    const defaultPropsFor = (id: string): Record<string, unknown> => ({
+        ...((compositions.find((composition) => composition.id === id)
+            ?.defaultProps ?? {}) as Record<string, unknown>),
+    });
+
+    // The host supplies the opening selection and owns the URL afterwards. Seed
+    // local state from it so picker clicks stay instant; the effect below follows
+    // later prop changes (SvelteKit reuses this page across navigation).
     const initialActiveId = untrack(() =>
         isKnownId(initialId) ? initialId : (compositions[0]?.id ?? ""),
     );
     let activeId = $state(initialActiveId);
     let liveProps = $state<Record<string, unknown>>(
-        untrack(
-            () =>
-                ({
-                    ...((compositions.find(
-                        (composition) => composition.id === initialActiveId,
-                    )?.defaultProps ?? {}) as Record<string, unknown>),
-                }) as Record<string, unknown>,
-        ),
+        untrack(() => defaultPropsFor(initialActiveId)),
     );
     let frame = $state(0);
     let isPlaying = $state(false);
@@ -68,18 +67,33 @@
         playerRef?.seek(clampFrame(next, duration));
     };
 
-    const select = (id: string): void => {
-        if (id === activeId) return;
+    const activate = (id: string): void => {
         activeId = id;
         frame = 0;
-        liveProps = {
-            ...((compositions.find((composition) => composition.id === id)
-                ?.defaultProps ?? {}) as Record<string, unknown>),
-        };
+        liveProps = defaultPropsFor(id);
+    };
+
+    const select = (id: string): void => {
+        if (id === activeId) return;
+        activate(id);
         // The host owns navigation. `apps/studio` writes `?composition=`; the
         // examples gallery ignores it. Either way this component stays route-free.
         onselect?.(id);
     };
+
+    /*
+     * A new `initialId` means the host navigated, so the selection must follow.
+     * Only a real prop change counts, and never override an id the picker already
+     * activated: that click reported up first, and its echo arrives back here.
+     */
+    let lastInitialId = untrack(() => initialId);
+    $effect(() => {
+        const next = initialId;
+        if (next === lastInitialId) return;
+        lastInitialId = next;
+        if (!isKnownId(next) || next === activeId) return;
+        activate(next);
+    });
 
     /*
      * Preview scale: fit, or an explicit zoom.

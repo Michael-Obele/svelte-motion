@@ -39,15 +39,24 @@
   </main>
 {:else if composition}
   {@const Component = composition.component}
-  <MotionRoot
-    fps={composition.fps}
-    width={composition.width}
-    height={composition.height}
-    durationInFrames={composition.durationInFrames}
-    initialFrame={frame}
-  >
-    <Component {...inputProps} />
-  </MotionRoot>
+  <!--
+    `MotionRoot` reads its config once, so a config change has to remount it.
+    The frame is deliberately not in the key: the renderer drives frames through
+    `window.svelteMotion_setFrame`, and remounting per frame would destroy render
+    throughput.
+  -->
+  {@const identity = `${composition.id}:${composition.fps}:${composition.width}:${composition.height}:${composition.durationInFrames}`}
+  {#key identity}
+    <MotionRoot
+      fps={composition.fps}
+      width={composition.width}
+      height={composition.height}
+      durationInFrames={composition.durationInFrames}
+      initialFrame={frame}
+    >
+      <Component {...inputProps} />
+    </MotionRoot>
+  {/key}
 {:else}
   <main class="error">
     <h1>Unknown composition</h1>

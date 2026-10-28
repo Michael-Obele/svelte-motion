@@ -10,7 +10,7 @@
   import { staticFile } from "../motion/asset.js";
   import type { IFrameProps } from "./media.js";
 
-  let { src, style = "", ...rest }: IFrameProps = $props();
+  let { src, style = "", onload, onerror, ...rest }: IFrameProps = $props();
 
   const resolvedSrc = $derived.by(() => {
     try {
@@ -34,11 +34,15 @@
   handle = delayRender(`<IFrame src="${untrack(() => resolvedSrc)}">`);
   settled = false;
 
-  const onLoad = () => settle();
+  const onLoad = (event: Event) => {
+    settle();
+    onload?.(event);
+  };
 
-  const onError = () => {
+  const onError = (event: Event) => {
     console.warn(`[svelte-motion] iframe failed to load: ${untrack(() => resolvedSrc)}`);
     settle();
+    onerror?.(event);
   };
 
   let lastSrc = untrack(() => resolvedSrc);

@@ -55,3 +55,23 @@ export const frameElapsedMs = (frame: number, fps: number): number => {
 
   return (frame / fps) * 1000;
 };
+
+/**
+ * The single frame-range policy for the whole engine: a frame is valid in
+ * `[0, durationInFrames - 1]`. A `durationInFrames` of N means N frames indexed
+ * 0..N-1, so frame N is out of range and clamps to N-1.
+ *
+ * Every entry point that accepts a frame from outside — the host query parser,
+ * the Player, `MotionRoot.initialFrame`, the Studio scrubber — must go through
+ * this one function so the surfaces can never disagree about the boundary.
+ * Non-finite input becomes frame 0.
+ */
+export const clampFrame = (frame: number, durationInFrames: number): number => {
+  if (!Number.isFinite(frame) || !Number.isFinite(durationInFrames)) {
+    return 0;
+  }
+
+  const max = Math.max(0, Math.floor(durationInFrames) - 1);
+
+  return Math.max(0, Math.min(Math.floor(frame), max));
+};

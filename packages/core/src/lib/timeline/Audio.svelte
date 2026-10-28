@@ -12,7 +12,15 @@
   import { staticFile } from "../motion/asset.js";
   import type { AudioProps } from "./media.js";
 
-  let { src, startFrom = 0, volume = 1, ...rest }: AudioProps = $props();
+  let {
+    src,
+    startFrom = 0,
+    volume = 1,
+    onloadeddata,
+    onseeked,
+    onerror,
+    ...rest
+  }: AudioProps = $props();
 
   const motion = getMotionContext();
 
@@ -52,18 +60,21 @@
   initialHandle = delayRender(`<Audio src="${untrack(() => resolvedSrc)}">`);
   initialSettled = false;
 
-  const onLoadedData = () => {
+  const onLoadedData = (event: Event) => {
     settleInitial();
+    onloadeddata?.(event);
   };
 
-  const onSeeked = () => {
+  const onSeeked = (event: Event) => {
     settleSeek();
+    onseeked?.(event);
   };
 
-  const onError = () => {
+  const onError = (event: Event) => {
     console.warn(`[svelte-motion] audio failed to load: ${untrack(() => resolvedSrc)}`);
     settleInitial();
     settleSeek();
+    onerror?.(event);
   };
 
   let lastSrc = untrack(() => resolvedSrc);

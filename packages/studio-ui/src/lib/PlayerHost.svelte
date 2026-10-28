@@ -39,25 +39,26 @@
 {:else if composition}
     {@const Component = composition.component}
     <!--
-    The `text-ink` wrapper is load-bearing, not decoration: the body is black on
-    the pixel surfaces, and `PlayerControls` colours itself from `currentColor`.
-    Without an explicit light text colour the inherited default is black, which
-    made the Play button invisible. The stage sits at 0,0, so this only paints
-    the controls below it.
+    `Player` reads its config once, so a config change has to remount it. The
+    frame is deliberately not in the key: it is driven by `startFrame` and seeks,
+    and remounting per frame would break playback.
   -->
-    <div class="text-ink">
-        <Player
-            component={Component}
-            {inputProps}
-            fps={composition.fps}
-            width={composition.width}
-            height={composition.height}
-            durationInFrames={composition.durationInFrames}
-            startFrame={frame}
-            autoPlay={false}
-            loop={false}
-            controls={true}
-        />
+    {@const identity = `${composition.id}:${composition.fps}:${composition.width}:${composition.height}:${composition.durationInFrames}`}
+    <div class="player-surface">
+        {#key identity}
+            <Player
+                component={Component}
+                {inputProps}
+                fps={composition.fps}
+                width={composition.width}
+                height={composition.height}
+                durationInFrames={composition.durationInFrames}
+                startFrame={frame}
+                autoPlay={false}
+                loop={false}
+                controls={true}
+            />
+        {/key}
     </div>
 {:else}
     <main class="error">
@@ -77,6 +78,16 @@
 {/if}
 
 <style>
+    /*
+     * Colour the controls, never the stage. `/render` has no wrapper, so a stage
+     * inheriting a different colour here would change `currentColor` pixels and
+     * break parity. `PlayerControls` colours itself from `currentColor`, so the
+     * light ink stays on that region only.
+     */
+    .player-surface :global(.svelte-motion-player-controls) {
+        color: var(--color-ink, #e2e8f0);
+    }
+
     .error {
         padding: 32px;
         color: #f8fafc;

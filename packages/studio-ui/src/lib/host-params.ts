@@ -11,7 +11,7 @@
  */
 
 import * as v from "valibot";
-import type { CompositionConfig } from "@svelte-motion/core";
+import { clampFrame, type CompositionConfig } from "@svelte-motion/core";
 
 /**
  * The only part of `URLSearchParams` these hosts need.
@@ -24,38 +24,49 @@ export type QueryParams = { get(name: string): string | null };
 
 /** Everything a host component needs, derived from the query string. */
 export type ResolvedHostProps = {
-  /** `?frame=` as a non-negative integer. Unusable input falls back to 0. */
+  /** `?frame=` clamped into `[0, durationInFrames - 1]` by the shared policy. */
   frame: number;
-  /** `?props=` as a plain object, or the composition's `defaultProps`. */
+  /** Validated `?props=` output, or the composition's `defaultProps`. */
   inputProps: Record<string, unknown>;
-  /** Set when `?props=` was supplied but failed the composition's schema. */
+  /** Set when `?props=` was supplied but unparseable or failed the schema. */
   validationError: string | undefined;
 };
 
-const parseFrame = (raw: string | null): number => {
+const parseFrame = (raw: string | null, durationInFrames: number): number => {
   const parsed = Number.parseInt(raw ?? "0", 10);
 
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  return clampFrame(parsed, durationInFrames);
 };
 
+/**
+ * Distinguishes the three `?props=` cases. Missing/empty means "use the
+ * composition's defaults" (trusted by definition). Present-but-unparseable is a
+ * caller error: report it and render the defaults so the mistake is visible
+ * rather than blank. Present-and-parseable returns the object for validation.
+ */
 const parseProps = (
   raw: string | null,
-  composition: CompositionConfig | undefined,
-): Record<string, unknown> => {
-  if (raw !== null && raw !== "") {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-
-      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      // A malformed `?props=` is a caller error, not a page crash: fall through
-      // to the defaults so the frame still renders and the mistake is visible.
-    }
+):
+  | { ok: true; value: Record<string, unknown> }
+  | { ok: false; error: string }
+  | { ok: "absent" } => {
+  if (raw === null || raw === "") {
+    return { ok: "absent" };
   }
 
-  return (composition?.defaultProps ?? {}) as Record<string, unknown>;
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "Invalid JSON: could not parse the ?props= object." };
+  }
+
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, error: "Invalid JSON: ?props= must be a JSON object." };
+  }
+
+  return { ok: true, value: parsed as Record<string, unknown> };
 };
 
 const formatIssues = (
@@ -79,32 +90,37 @@ export const resolveHostProps = (
   composition: CompositionConfig | undefined,
   params: QueryParams,
 ): ResolvedHostProps => {
-  const rawProps = params.get("props");
-  const parsedProps = parseProps(rawProps, composition);
+  const defaults = (composition?.defaultProps ?? {}) as Record<string, unknown>;
+  const frame = parseFrame(params.get("frame"), composition?.durationInFrames ?? 0);
+  const parsed = parseProps(params.get("props"));
 
-  let validationError: string | undefined;
-
-  if (
-    composition !== undefined &&
-    composition.schema !== undefined &&
-    rawProps !== null &&
-    rawProps !== ""
-  ) {
-    const result = v.safeParse(composition.schema, parsedProps);
-
-    if (!result.success) {
-      validationError = formatIssues(result.issues);
-    }
+  // Absent `?props=` → the composition's own defaults, trusted by definition.
+  if (parsed.ok === "absent") {
+    return { frame, inputProps: defaults, validationError: undefined };
   }
 
-  return {
-    frame: parseFrame(params.get("frame")),
-    // Invalid props fall back to the defaults, so the frame still renders and the
-    // error is visible rather than blank.
-    inputProps:
-      validationError === undefined
-        ? parsedProps
-        : ((composition?.defaultProps ?? {}) as Record<string, unknown>),
-    validationError,
-  };
+  // Present but unparseable → report it, render the defaults so the mistake is
+  // visible rather than blank.
+  if (parsed.ok === false) {
+    return { frame, inputProps: defaults, validationError: parsed.error };
+  }
+
+  // Present and parseable → validate when a schema exists. On success pass the
+  // validated output (transforms and schema defaults applied) to the
+  // composition, never the raw parsed object.
+  if (composition?.schema !== undefined) {
+    const result = v.safeParse(composition.schema, parsed.value);
+
+    if (!result.success) {
+      return { frame, inputProps: defaults, validationError: formatIssues(result.issues) };
+    }
+
+    return {
+      frame,
+      inputProps: result.output as Record<string, unknown>,
+      validationError: undefined,
+    };
+  }
+
+  return { frame, inputProps: parsed.value, validationError: undefined };
 };

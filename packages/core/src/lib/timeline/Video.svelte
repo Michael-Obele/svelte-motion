@@ -14,8 +14,17 @@
   import { staticFile } from "../motion/asset.js";
   import type { VideoProps } from "./media.js";
 
-  let { src, startFrom = 0, muted = true, volume = 1, style = "", ...rest }: VideoProps =
-    $props();
+  let {
+    src,
+    startFrom = 0,
+    muted = true,
+    volume = 1,
+    style = "",
+    onloadeddata,
+    onseeked,
+    onerror,
+    ...rest
+  }: VideoProps = $props();
 
   const motion = getMotionContext();
 
@@ -55,18 +64,21 @@
   initialHandle = delayRender(`<Video src="${untrack(() => resolvedSrc)}">`);
   initialSettled = false;
 
-  const onLoadedData = () => {
+  const onLoadedData = (event: Event) => {
     settleInitial();
+    onloadeddata?.(event);
   };
 
-  const onSeeked = () => {
+  const onSeeked = (event: Event) => {
     settleSeek();
+    onseeked?.(event);
   };
 
-  const onError = () => {
+  const onError = (event: Event) => {
     console.warn(`[svelte-motion] video failed to load: ${untrack(() => resolvedSrc)}`);
     settleInitial();
     settleSeek();
+    onerror?.(event);
   };
 
   let lastSrc = untrack(() => resolvedSrc);

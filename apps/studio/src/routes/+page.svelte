@@ -26,7 +26,11 @@
     import { page } from "$app/state";
     import { Studio } from "@svelte-motion/studio-ui";
 
-    const requestedId = page.url.searchParams.get("composition") ?? undefined;
+    // Reactive on purpose: SvelteKit reuses this page when only the query string
+    // changes, and a once-read value would keep pointing at the old selection.
+    const requestedId = $derived(
+        page.url.searchParams.get("composition") ?? undefined,
+    );
 
     /**
      * Selection is this app's business, not the Studio's: it owns `?composition=` so

@@ -76,5 +76,5 @@ export * from "./timeline/index.js";
 
 export { default as Player } from "./player/Player.svelte";
 export { default as PlayerControls } from "./player/PlayerControls.svelte";
-export { frameAt, frameElapsedMs } from "./player/frame-time.js";
+export { frameAt, frameElapsedMs, clampFrame } from "./player/frame-time.js";
 export type { PlayerControlsProps, PlayerProps } from "./player/types.js";

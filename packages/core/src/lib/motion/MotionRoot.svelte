@@ -20,6 +20,7 @@
   import { setMotionContext, type VideoConfig } from "./context.svelte.js";
   import Stage from "./Stage.svelte";
   import { installReadinessGlobal } from "./ready.js";
+  import { clampFrame } from "../player/frame-time.js";
 
   let {
     fps,
@@ -36,7 +37,9 @@
   const motion = untrack(() => new MotionContext({ fps, width, height, durationInFrames }));
   setMotionContext(motion);
 
-  motion.frame = untrack(() => initialFrame);
+  // One frame-range policy everywhere: `initialFrame` clamps into
+  // `[0, durationInFrames - 1]`, same as the Player and the host parser.
+  motion.frame = untrack(() => clampFrame(initialFrame, durationInFrames));
 
   const nextPaint = (): Promise<void> =>
     new Promise<void>((resolve) => {
