@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { computeBump, isReleaseCommit, levelFor } from "./version-from-commits.ts";
+import {
+  changesetTypeFor,
+  computeBump,
+  isReleaseCommit,
+  levelFor,
+} from "./version-from-commits.ts";
 
 describe("isReleaseCommit", () => {
   test("a merged version pull request is a release commit", () => {
@@ -56,6 +61,28 @@ describe("levelFor", () => {
 
   test("a bang in prose is not breaking", () => {
     expect(levelFor("docs: wow! nice").level).toBe("patch");
+  });
+});
+
+describe("changesetTypeFor", () => {
+  test("a feature is still only a patch", () => {
+    expect(changesetTypeFor("minor")).toBe("patch");
+  });
+
+  test("a breaking change is still only a patch", () => {
+    expect(changesetTypeFor("major")).toBe("patch");
+  });
+
+  test("a fix is a patch", () => {
+    expect(changesetTypeFor("patch")).toBe("patch");
+  });
+
+  test("the commit level never reaches the changeset", () => {
+    // The level is an audit trail, not a decision. A minor or major has to be a
+    // hand-written changeset, which wins over this generator.
+    for (const level of ["patch", "minor", "major"] as const) {
+      expect(changesetTypeFor(level)).toBe("patch");
+    }
   });
 });
 

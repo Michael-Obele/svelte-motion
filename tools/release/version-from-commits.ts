@@ -14,11 +14,17 @@
  *   nothing a consumer runs (`docs`, `chore`, `ci`, `test`, `style`, `build`).
  *   A fix is not a feature; calling it one inflated 0.4.1 to 0.5.0 off a single
  *   CI-only commit.
- * - `minor` — `feat`, and any commit without a recognisable type. Features move
- *   the version; everything else has to earn it.
+ * - `minor` — `feat`, and any commit without a recognisable type.
  *
  * The rules live in `BUMP_RULES` below, in priority order. Edit that table, not
  * the logic.
+ *
+ * Those levels describe the commits; they do not decide the release. The
+ * generator only ever writes `patch` (see `changesetTypeFor`). A minor or a
+ * major is a decision, not an inference: it happens when a human runs
+ * `bun changeset` and picks one, and that hand-written file wins over this
+ * script. Conventional Commits describes the diff; it does not get to walk the
+ * version.
  *
  * A changeset written by hand always wins: if any changeset already exists this
  * script does nothing. It is a floor, not a competitor.
@@ -77,6 +83,17 @@ export const BUMP_RULES: ReadonlyArray<{
 ];
 
 const ORDER: Record<BumpLevel, number> = { patch: 0, minor: 1, major: 2 };
+
+/**
+ * The step a generated changeset asks for: always `patch`.
+ *
+ * The commit level is still computed and printed, because it is the audit trail
+ * for what landed — but it does not move the version. A minor or a major is a
+ * deliberate act: run `bun changeset`, pick the type, and that file wins over
+ * this generator. Anything else lets a commit subject decide the public version,
+ * which is how 0.4.1 became 0.5.0 off two `feat` commits.
+ */
+export const changesetTypeFor = (_level: BumpLevel): BumpLevel => "patch";
 
 /** The level one commit asks for. */
 export const levelFor = (message: string): { level: BumpLevel; reason: string } => {
@@ -185,7 +202,6 @@ const main = async (): Promise<number> => {
   for (const line of evidence) {
     console.log(`  ${line}`);
   }
-  console.log(`changeset:auto: bump → ${level}`);
 
   // The packages a bump applies to come from the same place changesets reads, so
   // the fixed group is never duplicated into this script.
@@ -199,6 +215,14 @@ const main = async (): Promise<number> => {
     return 0;
   }
 
+  const type = changesetTypeFor(level);
+
+  console.log(
+    level === type
+      ? `changeset:auto: bump → ${type}`
+      : `changeset:auto: bump → ${type} (commits reached ${level}; a minor or major is a hand-written changeset)`,
+  );
+
   const summary = messages
     .map((message) => `- ${message.split("\n")[0]}`)
     .slice(0, 20)
@@ -206,7 +230,7 @@ const main = async (): Promise<number> => {
 
   const body = [
     "---",
-    ...packages.map((name) => `"${name}": ${level}`),
+    ...packages.map((name) => `"${name}": ${type}`),
     "---",
     "",
     summary,
@@ -216,7 +240,7 @@ const main = async (): Promise<number> => {
   ].join("\n");
 
   await Bun.write(resolve(changesetDir, "auto-generated.md"), body);
-  console.log(`changeset:auto: wrote .changeset/auto-generated.md (${level} × ${packages.length})`);
+  console.log(`changeset:auto: wrote .changeset/auto-generated.md (${type} × ${packages.length})`);
 
   return 0;
 };

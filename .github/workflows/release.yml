@@ -72,9 +72,10 @@ jobs:
         uses: changesets/action@v2
         with:
           # No hand-written changeset is needed: the step above wrote one from
-          # the commits since the last tag (default minor, major on a breaking
-          # marker, patch when nothing shippable changed, no-op if a changeset
-          # already exists or HEAD is a release commit).
+          # the commits since the last tag. It always writes `patch` — a minor
+          # or a major only happens when a human runs `bun changeset` and picks
+          # one, and that file wins over the generator. It is a no-op if a
+          # changeset already exists or HEAD is a release commit.
           #
           # `vp fmt` runs after `changeset version` because the changelogs it
           # generates are not formatted, which failed `bun run check` on every

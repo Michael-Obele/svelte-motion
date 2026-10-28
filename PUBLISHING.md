@@ -120,9 +120,19 @@ the registry fails the job, so the bump is not optional.
 
 ### Not commit-message driven
 
-Nothing parses commit text. A `fix:` commit does not bump anything on its own — the changeset
-file is the signal. With three packages locked to one version, an explicit record of intent
-beats inferring from commit subjects.
+Nothing parses commit text into a version. A `fix:` commit does not bump anything on its own —
+the changeset file is the signal. With three packages locked to one version, an explicit record
+of intent beats inferring from commit subjects.
+
+`bun run changeset:auto` (`tools/release/version-from-commits.ts`) writes that file when none is
+pending, so a merge to `main` does not need a hand-written one. It **always writes `patch`**.
+The commit subjects are still read and printed as an audit trail, but they never choose the
+step: a `feat` is a patch, and so is a `feat!:`.
+
+A minor or a major is a decision, not an inference. To take one, run `bun changeset`, pick
+`minor` or `major`, and commit the file — a hand-written changeset wins over the generator,
+which is a floor, not a competitor. That is the whole mechanism: the version only moves faster
+than one patch when a human says so.
 
 ## Tags
 
