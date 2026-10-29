@@ -85,7 +85,26 @@ export default defineComposition({
 
 `spring({ frame, fps, config })` gives physics-based motion. `measureSpring()` tells you how long it takes.
 
-`interpolateColors()` blends colours. Easing functions live under `Easing`.
+`interpolateColors()` blends colours. Easing functions live under `Easing`, and Svelte's own curves are re-exported as `svelteEasing` (`{ easing: svelteEasing.bounceOut }`).
+
+### Svelte transitions
+
+`transition:fly` cannot be used in a composition: it fires when an element enters or leaves the DOM and runs on the Web Animations API clock, so seeking to frame 45 restarts the intro at `t = 0`. The factory behind it (`fly(node, params)` → `css(t, u)`) is pure, so drive that instead:
+
+```svelte
+<script>
+  import { fly } from "svelte/transition";
+  import { frameTransition, Sequence } from "@svelte-motion/core";
+
+  const intro = { fn: fly, params: { y: 200 }, from: 0, durationInFrames: 15 };
+</script>
+
+<Sequence from={30} durationInFrames={45}>
+  <div use:frameTransition={intro}>flies in over frames 30-45, then holds</div>
+</Sequence>
+```
+
+`from` and `durationInFrames` are in the local frame of the enclosing `Sequence`. `direction: "out"` runs the same factory backwards. Before the window the element holds the start value; after it, the applied styles are removed and the element returns to its own CSS. Hoist the options object out of the template — a fresh literal on each render re-runs the factory, and `slide`/`scale`/`draw` measure the node while doing so.
 
 **Not implemented:** the `output` / `outputType` options (`"perceptual-scale"`, `"font-weight"`) throw rather than silently doing the wrong thing.
 
@@ -109,10 +128,12 @@ Rendering is Node-only: `@svelte-motion/renderer` shells out to Playwright and F
 - **Named types cannot be exported from `.svelte` files.** Put prop types in a `.ts` module (`timeline/types.ts` pattern) or `svelte-check` will not see them.
 - **Concurrency 1 streams** (flat memory). Higher values buffer every frame to reorder them, so memory scales with video length — use it only when render time matters more.
 - **Wall clock is fine in the Player, never in a composition.** The Player drives frames from real time; a composition must not.
+- **A running CSS or WAAPI animation is reported, not fixed.** After each seek, any animation still on the browser clock warns once per identity (`[svelte-motion] animation "spin" was still running at frame N`) and lands in `RenderResult.warnings`. The render still succeeds — with different bytes each run.
 
 ## Where things live
 
 - Frame runtime: `packages/core/src/lib/motion/context.svelte.ts`
+- Svelte transition integration: `packages/core/src/lib/motion/frame-transition.svelte.ts`
 - Timeline primitives: `packages/core/src/lib/timeline/`
 - Math: `packages/core/src/lib/math/`
 - Render loop: `packages/renderer/src/render.ts`

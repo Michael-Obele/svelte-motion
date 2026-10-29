@@ -24,6 +24,7 @@ import { Easing } from "../src/lib/math/easing.js";
 import { interpolate } from "../src/lib/math/interpolate.js";
 import { interpolateColors } from "../src/lib/math/interpolate-colors.js";
 import { measureSpring, spring } from "../src/lib/math/spring.js";
+import { svelteEasing } from "../src/lib/math/svelte-easing.js";
 
 /**
  * `Easing`'s curves are static methods. Passing one as a value reads as an
@@ -1020,5 +1021,32 @@ describe("bezier", () => {
     const curved = bezier(0.42, 0, 1, 1);
     expect(Number.isFinite(curved(2))).toBe(true);
     expect(Number.isFinite(curved(-1))).toBe(true);
+  });
+});
+
+/*
+ * Svelte's own curves, re-exported rather than copied (`math/svelte-easing.ts`).
+ * They are the reason six of the clean-room kernels (D22) have nothing to prove:
+ * upstream ships them, MIT, as pure `(t) => number` functions.
+ */
+describe("svelteEasing", () => {
+  test("satisfies interpolate's easing option", () => {
+    expect(interpolate(15, [0, 30], [0, 1], { easing: svelteEasing.linear })).toBe(0.5);
+    expect(interpolate(15, [0, 30], [0, 1], { easing: svelteEasing.cubicIn })).toBe(0.125);
+  });
+
+  test("every curve maps the ends of the range to the ends of the range", () => {
+    for (const [name, curve] of Object.entries(svelteEasing)) {
+      expect(curve(0), name).toBeCloseTo(0, 10);
+      expect(curve(1), name).toBeCloseTo(1, 10);
+    }
+  });
+
+  test("is finite across the range, including overshooting curves", () => {
+    for (const [name, curve] of Object.entries(svelteEasing)) {
+      for (let t = 0; t <= 1; t += 0.05) {
+        expect(Number.isFinite(curve(t)), `${name} at ${t.toFixed(2)}`).toBe(true);
+      }
+    }
   });
 });

@@ -64,6 +64,15 @@ export {
 
 export { prefetch, staticFile } from "./motion/asset.js";
 
+export {
+  frameTransition,
+  type FrameTransitionDirection,
+  type FrameTransitionFunction,
+  type FrameTransitionOptions,
+} from "./motion/frame-transition.svelte.js";
+
+export { resetWallClockWarnings, warnOnWallClockAnimations } from "./motion/wall-clock.js";
+
 /* -------------------------------------------------------------------------- */
 /* Timeline                                                                    */
 /* -------------------------------------------------------------------------- */

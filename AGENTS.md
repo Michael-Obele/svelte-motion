@@ -24,7 +24,7 @@ If you need the full spec, read the canonical copy at `AI-Plans/plans/svelte-mot
 | `plan/architecture.md`      | Components, module layout, frame runtime, failure modes | You need components, data flow, or interfaces       |
 | `plan/svelte-mapping.md`    | React → Svelte 5 API translation                        | You need the Remotion concept → Svelte table        |
 | `plan/rendering.md`         | Headless Chrome + FFmpeg pipeline, determinism, CLI     | You need the render pipeline or concurrency rules   |
-| `plan/decisions.md`         | D1–D27, risks, open questions                           | You need why a choice was made or what was rejected |
+| `plan/decisions.md`         | D1–D28, risks, open questions                           | You need why a choice was made or what was rejected |
 | `plan/milestones.md`        | M0–M9 plus M1.5 with commands and done-when gates       | You need the next task and its gate                 |
 | `GLOSSARY.md`               | Terms used across the project                           | You need a precise definition, not a spec           |
 | `docs/adr/`                 | Load-bearing decisions and what they cost               | You need the reasoning behind a boundary            |
@@ -134,6 +134,11 @@ See `plan/architecture.md` for the full component table, interfaces, and failure
   Valibot's validated output, never the raw parsed object.
 - **D27** Media readiness handlers run first, then forward to the user's callback; props use Svelte's
   native element attribute types.
+- **D28** Svelte's built-in motion is an interaction primitive, not a render primitive: the frame owns
+  time. `svelte/easing` is re-exported as `svelteEasing`; `use:frameTransition` drives Svelte's own
+  transition factories from the frame instead of the Web Animations clock; a seek that leaves an
+  animation running warns once per identity. See
+  `docs/adr/0005-svelte-built-in-motion-is-an-interaction-primitive.md`.
 
 Open questions live in `plan/decisions.md`: system FFmpeg vs shipped binaries, Zod acceptance, and the
 `interpolate` output sugar. SvelteKit version is settled: **3.1.0** (D15), not the D9 dual-path. Studio
@@ -158,16 +163,17 @@ See `plan/rendering.md` for concurrency, asset prefetch, and `delayRender` timeo
 
 ## Svelte 5 mapping (React → Svelte)
 
-| Remotion                   | Svelte Motion                                | Notes                                            |
-| -------------------------- | -------------------------------------------- | ------------------------------------------------ |
-| `useCurrentFrame()`        | `getMotionContext().frame` (`$state`)        | Same name, rune-backed                           |
-| `useVideoConfig()`         | `useVideoConfig()`                           | `{fps, width, height, durationInFrames}`         |
-| `<Sequence from duration>` | `<Sequence from durationInFrames>` + snippet | `localFrame = globalFrame - sum(from ancestors)` |
-| `<Series>`                 | `<Series>`                                   | Computes `from` cumulatively                     |
-| `<Loop>` / `<Freeze>`      | `<Loop>` / `<Freeze>`                        | `frame % duration` / pinned frame                |
-| `Composition`              | `defineComposition` + `import.meta.glob`     | Registry via Vite glob                           |
-| `interpolate`/`spring`     | `interpolate`/`spring`                       | Pure TS; clean-room re-implementation planned    |
-| `delayRender`              | `delayRender` + `ready`                      | Counter-based, renderer polls                    |
+| Remotion                   | Svelte Motion                                | Notes                                                 |
+| -------------------------- | -------------------------------------------- | ----------------------------------------------------- |
+| `useCurrentFrame()`        | `getMotionContext().frame` (`$state`)        | Same name, rune-backed                                |
+| `useVideoConfig()`         | `useVideoConfig()`                           | `{fps, width, height, durationInFrames}`              |
+| `<Sequence from duration>` | `<Sequence from durationInFrames>` + snippet | `localFrame = globalFrame - sum(from ancestors)`      |
+| `<Series>`                 | `<Series>`                                   | Computes `from` cumulatively                          |
+| `<Loop>` / `<Freeze>`      | `<Loop>` / `<Freeze>`                        | `frame % duration` / pinned frame                     |
+| `Composition`              | `defineComposition` + `import.meta.glob`     | Registry via Vite glob                                |
+| `interpolate`/`spring`     | `interpolate`/`spring`                       | Pure TS; clean-room re-implementation planned         |
+| `<Transition>`             | `use:frameTransition`                        | Svelte's own transition factories, frame-driven (D28) |
+| `delayRender`              | `delayRender` + `ready`                      | Counter-based, renderer polls                         |
 
 See `plan/svelte-mapping.md` for the full table and snippet examples.
 
@@ -240,6 +246,7 @@ provable in milliseconds instead of a push-and-wait cycle.
 ## Where to look next
 
 - Frame runtime: `packages/core/src/lib/motion/context.svelte.ts`
+- Svelte-motion integration: `packages/core/src/lib/motion/frame-transition.svelte.ts`, `wall-clock.ts`, `math/svelte-easing.ts`
 - Timeline primitives: `packages/core/src/lib/timeline/`
 - Studio surfaces: `packages/studio-ui/src/lib/` (`Studio`, `RenderHost`, `PlayerHost`, `host-params`)
 - A user-facing composition: `examples/src/lib/compositions/title-card/`

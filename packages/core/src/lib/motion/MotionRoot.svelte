@@ -20,6 +20,7 @@
   import { setMotionContext, type VideoConfig } from "./context.svelte.js";
   import Stage from "./Stage.svelte";
   import { installReadinessGlobal } from "./ready.js";
+  import { warnOnWallClockAnimations } from "./wall-clock.js";
   import { clampFrame } from "../player/frame-time.js";
 
   let {
@@ -59,6 +60,9 @@
       motion.frame = next;
       await tick();
       await nextPaint();
+      // Only meaningful after the flush and the paint: the styles of the new
+      // frame have not started any CSS transition before this point.
+      warnOnWallClockAnimations(next);
     };
     bridge.svelteMotion_getFrame = (): number => motion.frame;
 
