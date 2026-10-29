@@ -40,7 +40,9 @@
   };
 
   const onError = (event: Event) => {
-    console.warn(`[svelte-motion] iframe failed to load: ${untrack(() => resolvedSrc)}`);
+    console.warn(
+      `[svelte-motion] iframe failed to load: ${untrack(() => resolvedSrc)}`,
+    );
     settle();
     onerror?.(event);
   };
@@ -61,4 +63,5 @@
   });
 </script>
 
-<iframe src={resolvedSrc} {style} onload={onLoad} onerror={onError} {...rest}></iframe>
+<iframe src={resolvedSrc} {style} onload={onLoad} onerror={onError} {...rest}
+></iframe>

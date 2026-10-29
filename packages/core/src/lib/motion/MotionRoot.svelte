@@ -34,7 +34,9 @@
     children: Snippet;
   } & VideoConfig & { initialFrame?: number; background?: string } = $props();
 
-  const motion = untrack(() => new MotionContext({ fps, width, height, durationInFrames }));
+  const motion = untrack(
+    () => new MotionContext({ fps, width, height, durationInFrames }),
+  );
   setMotionContext(motion);
 
   // One frame-range policy everywhere: `initialFrame` clamps into

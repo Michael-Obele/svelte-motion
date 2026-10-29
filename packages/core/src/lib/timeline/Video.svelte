@@ -75,7 +75,9 @@
   };
 
   const onError = (event: Event) => {
-    console.warn(`[svelte-motion] video failed to load: ${untrack(() => resolvedSrc)}`);
+    console.warn(
+      `[svelte-motion] video failed to load: ${untrack(() => resolvedSrc)}`,
+    );
     settleInitial();
     settleSeek();
     onerror?.(event);
@@ -87,7 +89,8 @@
     const current = resolvedSrc;
     if (current === lastSrc) return;
     lastSrc = current;
-    if (!initialSettled && initialHandle !== null) continueRender(initialHandle);
+    if (!initialSettled && initialHandle !== null)
+      continueRender(initialHandle);
     initialHandle = delayRender(`<Video src="${current}">`);
     initialSettled = false;
     if (!seekSettled && seekHandle !== null) {
@@ -106,7 +109,9 @@
       if (seekHandle !== null && !seekSettled) {
         continueRender(seekHandle);
       }
-      seekHandle = delayRender(`<Video src="${resolvedSrc}" seek frame=${frame}>`);
+      seekHandle = delayRender(
+        `<Video src="${resolvedSrc}" seek frame=${frame}>`,
+      );
       seekSettled = false;
       if (Math.abs(videoEl.currentTime - target) < 0.001) {
         settleSeek();
@@ -141,10 +146,10 @@
 <video
   bind:this={videoEl}
   src={resolvedSrc}
-  muted={muted}
+  {muted}
   preload="auto"
   playsinline
-  style={style}
+  {style}
   onloadeddata={onLoadedData}
   onseeked={onSeeked}
   onerror={onError}

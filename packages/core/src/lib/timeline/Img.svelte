@@ -11,7 +11,14 @@
   import { staticFile } from "../motion/asset.js";
   import type { ImgProps } from "./media.js";
 
-  let { src, alt = "", style = "", onload, onerror, ...rest }: ImgProps = $props();
+  let {
+    src,
+    alt = "",
+    style = "",
+    onload,
+    onerror,
+    ...rest
+  }: ImgProps = $props();
 
   const resolvedSrc = $derived.by(() => {
     try {
@@ -44,7 +51,9 @@
   };
 
   const onError = (event: Event) => {
-    console.warn(`[svelte-motion] image failed to load: ${untrack(() => resolvedSrc)}`);
+    console.warn(
+      `[svelte-motion] image failed to load: ${untrack(() => resolvedSrc)}`,
+    );
     settle();
     onerror?.(event);
   };
@@ -67,4 +76,11 @@
   });
 </script>
 
-<img src={resolvedSrc} {alt} {style} onload={onLoad} onerror={onError} {...rest} />
+<img
+  src={resolvedSrc}
+  {alt}
+  {style}
+  onload={onLoad}
+  onerror={onError}
+  {...rest}
+/>

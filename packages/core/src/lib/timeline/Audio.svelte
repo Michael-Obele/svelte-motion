@@ -71,7 +71,9 @@
   };
 
   const onError = (event: Event) => {
-    console.warn(`[svelte-motion] audio failed to load: ${untrack(() => resolvedSrc)}`);
+    console.warn(
+      `[svelte-motion] audio failed to load: ${untrack(() => resolvedSrc)}`,
+    );
     settleInitial();
     settleSeek();
     onerror?.(event);
@@ -83,7 +85,8 @@
     const current = resolvedSrc;
     if (current === lastSrc) return;
     lastSrc = current;
-    if (!initialSettled && initialHandle !== null) continueRender(initialHandle);
+    if (!initialSettled && initialHandle !== null)
+      continueRender(initialHandle);
     initialHandle = delayRender(`<Audio src="${current}">`);
     initialSettled = false;
     if (!seekSettled && seekHandle !== null) {
@@ -102,7 +105,9 @@
       if (seekHandle !== null && !seekSettled) {
         continueRender(seekHandle);
       }
-      seekHandle = delayRender(`<Audio src="${resolvedSrc}" seek frame=${frame}>`);
+      seekHandle = delayRender(
+        `<Audio src="${resolvedSrc}" seek frame=${frame}>`,
+      );
       seekSettled = false;
       if (Math.abs(audioEl.currentTime - target) < 0.001) {
         settleSeek();

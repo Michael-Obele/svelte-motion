@@ -15,7 +15,8 @@
 
   let { composition }: { composition: CompositionConfig } = $props();
 
-  const stringify = (value: unknown): string => JSON.stringify(value ?? {}, null, 2);
+  const stringify = (value: unknown): string =>
+    JSON.stringify(value ?? {}, null, 2);
 
   // `untrack` makes the intent explicit: this component is re-created by the
   // parent's `{#key composition.id}`, so these are init-only reads of a prop
@@ -46,7 +47,11 @@
       return;
     }
 
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       error = "Invalid JSON: props must be a JSON object.";
       return;
     }
