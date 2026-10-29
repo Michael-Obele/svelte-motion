@@ -1,5 +1,11 @@
 # @svelte-motion/cli
 
+## 0.6.0
+
+### Patch Changes
+
+- @svelte-motion/renderer@0.6.0
+
 ## 0.5.1
 
 ### Patch Changes
